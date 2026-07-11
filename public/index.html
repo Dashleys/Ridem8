@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RideM8 — route-based ridesharing for travellers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --asphalt:#262420;
+    --asphalt-soft:#34312b;
+    --paper:#F3ECDD;
+    --paper-deep:#EAE1CB;
+    --amber:#E08A37;
+    --amber-deep:#C76F22;
+    --sage:#7C8E68;
+    --sage-deep:#5F7150;
+    --rust:#B3492E;
+    --ink:#241F19;
+    --ink-soft:#6B6256;
+    --line:#DCD0B4;
+    --line-dark:#473F35;
+    --white:#FFFCF6;
+    --font-display:'Bricolage Grotesque', sans-serif;
+    --font-body:'Public Sans', sans-serif;
+    --font-mono:'JetBrains Mono', monospace;
+    --radius-s:6px;
+    --radius-m:14px;
+    --radius-l:26px;
+    --shadow-card: 0 1px 0 rgba(36,31,25,0.04), 0 12px 24px -16px rgba(36,31,25,0.35);
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--font-body);
+    -webkit-font-smoothing:antialiased;
+  }
+  img,svg{display:block;}
+  a{color:inherit;text-decoration:none;}
+  button{font-family:inherit;cursor:pointer;}
+  h1,h2,h3{font-family:var(--font-display);margin:0;letter-spacing:-0.01em;}
+  p{margin:0;}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 32px;}
+  @media (max-width:720px){.wrap{padding:0 20px;}}
+
+  /* ---------- icon sprite ---------- */
+  .sprite{position:absolute;width:0;height:0;overflow:hidden;}
+
+  /* ---------- nav ---------- */
+  .nav{
+    position:sticky;top:0;z-index:50;
+    background:rgba(243,236,221,0.88);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);
+  }
+  .nav-inner{
+    max-width:1180px;margin:0 auto;padding:16px 32px;
+    display:flex;align-items:center;justify-content:space-between;gap:24px;
+  }
+  .logo{
+    display:flex;align-items:center;gap:9px;
+    font-family:var(--font-display);font-weight:700;font-size:20px;
+  }
+  .logo .dot{width:9px;height:9px;border-radius:50%;background:var(--rust);display:inline-block;}
+  .nav-links{display:flex;gap:28px;font-size:14.5px;color:var(--ink-soft);}
+  .nav-links a{transition:color .15s;}
+  .nav-links a:hover{color:var(--ink);}
+  .btn{
+    border:none;border-radius:999px;padding:11px 20px;font-weight:600;font-size:14.5px;
+    transition:transform .15s, box-shadow .15s;
+  }
+  .btn:hover{transform:translateY(-1px);}
+  .btn:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, .chip:focus-visible{
+    outline:2.5px solid var(--amber-deep); outline-offset:2px;
+  }
+  .btn-primary{background:var(--asphalt);color:var(--paper);}
+  .btn-primary:hover{box-shadow:0 8px 18px -8px rgba(38,36,32,0.5);}
+  .btn-amber{background:var(--amber);color:var(--asphalt);}
+  .btn-amber:hover{box-shadow:0 8px 18px -8px rgba(224,138,55,0.6);}
+  .btn-ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line-dark);}
+  .btn-ghost:hover{border-color:var(--ink);}
+  @media (max-width:840px){.nav-links{display:none;}}
+
+  /* ---------- hero ---------- */
+  .hero{padding:64px 0 40px;overflow:hidden;}
+  .hero-inner{
+    display:grid;grid-template-columns:1.1fr 0.9fr;gap:56px;align-items:center;
+  }
+  @media (max-width:900px){.hero-inner{grid-template-columns:1fr;gap:48px;}}
+  .eyebrow{
+    font-family:var(--font-mono);font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--sage-deep);font-weight:500;margin-bottom:14px;display:block;
+  }
+  .hero-copy h1{
+    font-size:46px;line-height:1.06;font-weight:700;color:var(--ink);
+  }
+  @media (max-width:560px){.hero-copy h1{font-size:34px;}}
+  .hero-copy .sub{
+    margin-top:18px;font-size:17px;line-height:1.6;color:var(--ink-soft);max-width:480px;
+  }
+  .hero-ctas{display:flex;gap:12px;margin-top:30px;flex-wrap:wrap;}
+  .hero-ctas .btn{padding:14px 24px;font-size:15px;}
+  .hero-stats{
+    display:flex;gap:28px;margin-top:38px;flex-wrap:wrap;
+  }
+  .hero-stats div{font-family:var(--font-mono);font-size:13px;color:var(--ink-soft);}
+  .hero-stats b{color:var(--ink);font-size:16px;display:block;font-weight:700;}
+
+  /* signature: cardboard sign */
+  .hero-visual{display:flex;justify-content:center;}
+  .sign-card{
+    position:relative;
+    background:var(--white);
+    border:2.5px dashed var(--line-dark);
+    border-radius:3px;
+    padding:34px 30px 28px;
+    width:280px;
+    transform:rotate(-3.5deg);
+    box-shadow:var(--shadow-card);
+    text-align:center;
+  }
+  .sign-card::before{
+    content:'';position:absolute;top:-14px;left:50%;transform:translateX(-50%) rotate(-3.5deg);
+    width:34px;height:14px;background:var(--amber);border-radius:2px;
+  }
+  .sign-pin{
+    position:absolute;top:-22px;right:18px;font-size:26px;transform:rotate(12deg);
+  }
+  .sign-route{
+    font-family:var(--font-display);font-weight:800;font-size:30px;letter-spacing:-0.01em;
+    color:var(--asphalt);line-height:1.1;
+  }
+  .sign-arrow{font-family:var(--font-mono);color:var(--rust);font-size:20px;margin:6px 0;}
+  .sign-meta{
+    margin-top:18px;font-family:var(--font-mono);font-size:11.5px;letter-spacing:.06em;
+    color:var(--ink-soft);border-top:1px dashed var(--line);padding-top:12px;
+  }
+
+  /* ---------- section heads ---------- */
+  section{padding:84px 0;}
+  .section-head{max-width:560px;margin-bottom:44px;}
+  .section-head .eyebrow{margin-bottom:10px;}
+  .section-head h2{font-size:32px;font-weight:700;}
+  .section-head p{margin-top:12px;color:var(--ink-soft);font-size:16px;line-height:1.6;}
+
+  /* ---------- demo (try it) ---------- */
+  .demo{background:var(--asphalt);color:var(--paper);border-radius:var(--radius-l);margin:0 24px;padding:64px 48px;}
+  @media (max-width:720px){.demo{margin:0 12px;padding:48px 24px;}}
+  .demo .section-head p{color:#C8C1B2;}
+  .demo .eyebrow{color:var(--amber);}
+  .segmented{
+    display:inline-flex;background:var(--asphalt-soft);border-radius:999px;padding:5px;margin-bottom:32px;
+    border:1px solid var(--line-dark);
+  }
+  .segmented button{
+    border:none;background:transparent;color:#C8C1B2;padding:10px 22px;border-radius:999px;
+    font-weight:600;font-size:14.5px;transition:all .2s;
+  }
+  .segmented button.active{background:var(--paper);color:var(--ink);}
+
+  .demo-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px;}
+  @media (max-width:840px){.demo-grid{grid-template-columns:1fr;}}
+  .panel{display:none;}
+  .panel.active{display:block;}
+  .field{margin-bottom:16px;}
+  .field label{
+    display:block;font-family:var(--font-mono);font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;
+    color:#A39C8C;margin-bottom:7px;
+  }
+  .field input, .field select, .field textarea{
+    width:100%;padding:12px 14px;border-radius:var(--radius-s);border:1.5px solid var(--line-dark);
+    background:var(--asphalt-soft);color:var(--paper);font-family:var(--font-body);font-size:14.5px;
+  }
+  .field input::placeholder, .field textarea::placeholder{color:#73695a;}
+  .row-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .choice-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  @media (max-width:480px){.choice-grid{grid-template-columns:1fr;}}
+  .choice{
+    border:1.5px solid var(--line-dark);border-radius:var(--radius-s);padding:11px 12px;cursor:pointer;
+    font-size:13.5px;color:#D8D2C3;transition:all .15s;display:flex;align-items:center;gap:8px;
+  }
+  .choice:hover{border-color:var(--amber);}
+  .choice input{accent-color:var(--amber);margin:0;}
+  .choice.checked{border-color:var(--amber);background:rgba(224,138,55,0.12);color:var(--paper);}
+  .stepper{display:flex;align-items:center;gap:14px;}
+  .stepper button{
+    width:34px;height:34px;border-radius:50%;border:1.5px solid var(--line-dark);background:var(--asphalt-soft);
+    color:var(--paper);font-size:17px;font-weight:700;
+  }
+  .stepper span{font-family:var(--font-mono);font-size:18px;min-width:18px;text-align:center;}
+  .submit-row{margin-top:22px;}
+
+  .result-area{margin-top:28px;}
+  .result-sign{
+    background:var(--white);color:var(--ink);border:2.5px dashed var(--asphalt-soft);border-radius:3px;
+    padding:24px 26px;max-width:340px;transform:rotate(-1.2deg);box-shadow:var(--shadow-card);
+  }
+  .result-sign .rt{font-family:var(--font-display);font-weight:800;font-size:23px;}
+  .result-sign .meta{font-family:var(--font-mono);font-size:12px;color:var(--ink-soft);margin-top:10px;}
+  .match-list{margin-top:18px;display:flex;flex-direction:column;gap:10px;}
+  .match-row{
+    display:flex;align-items:center;gap:12px;background:var(--asphalt-soft);border-radius:var(--radius-s);
+    padding:10px 14px;border:1px solid var(--line-dark);
+  }
+  .avatar{
+    width:36px;height:36px;border-radius:50%;background:var(--sage);display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-display);font-weight:700;color:var(--asphalt);font-size:14px;flex-shrink:0;
+  }
+  .match-row .info{flex:1;font-size:13.5px;}
+  .match-row .info b{display:block;font-size:14px;}
+  .match-row .info span{color:#A39C8C;font-family:var(--font-mono);font-size:11.5px;}
+  .tag{
+    font-family:var(--font-mono);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;
+    padding:4px 9px;border-radius:999px;background:var(--amber);color:var(--asphalt);font-weight:600;
+  }
+  .fade-in{animation:fadeUp .4s ease both;}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+
+  /* ---------- browse ---------- */
+  .chips{display:flex;gap:10px;margin-bottom:30px;flex-wrap:wrap;}
+  .chip{
+    border:1.5px solid var(--line-dark);background:transparent;border-radius:999px;padding:8px 16px;
+    font-size:13.5px;font-weight:600;color:var(--ink-soft);
+  }
+  .chip.active{background:var(--asphalt);color:var(--paper);border-color:var(--asphalt);}
+  .ride-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+  @media (max-width:900px){.ride-grid{grid-template-columns:repeat(2,1fr);}}
+  @media (max-width:620px){.ride-grid{grid-template-columns:1fr;}}
+  .ride-card{
+    background:var(--white);border-radius:var(--radius-m);padding:20px 20px 18px;border:1px solid var(--line);
+    box-shadow:var(--shadow-card);transition:transform .18s;
+  }
+  .ride-card:hover{transform:translateY(-3px);}
+  .ride-card .route{font-family:var(--font-display);font-weight:700;font-size:18px;}
+  .ride-card .arrow{color:var(--rust);margin:0 6px;}
+  .ride-card .when{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-soft);margin-top:6px;}
+  .ride-card .driver{display:flex;align-items:center;gap:9px;margin-top:14px;}
+  .ride-card .driver .name{font-size:13.5px;font-weight:600;}
+  .ride-card .stars{color:var(--amber-deep);font-size:12px;}
+  .ride-card .foot{display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding-top:14px;border-top:1px solid var(--line);}
+  .badge{
+    font-family:var(--font-mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;
+    padding:4px 9px;border-radius:999px;
+  }
+  .badge.free{background:rgba(124,142,104,0.18);color:var(--sage-deep);}
+  .badge.snacks{background:rgba(224,138,55,0.18);color:var(--amber-deep);}
+  .badge.petrol{background:rgba(179,73,46,0.14);color:var(--rust);}
+  .badge.price{background:rgba(36,31,25,0.1);color:var(--ink);}
+  .seats-left{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-soft);}
+
+  /* ---------- trust ---------- */
+  .trust-grid{display:grid;grid-template-columns:0.85fr 1.15fr;gap:56px;}
+  @media (max-width:900px){.trust-grid{grid-template-columns:1fr;}}
+  .profile-card{
+    background:var(--white);border:1px solid var(--line);border-radius:var(--radius-m);padding:26px;
+    box-shadow:var(--shadow-card);
+  }
+  .profile-top{display:flex;gap:14px;align-items:center;}
+  .profile-top .avatar{width:54px;height:54px;font-size:18px;background:var(--amber);}
+  .profile-top b{font-size:17px;display:block;}
+  .profile-top .verified{
+    display:inline-flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:11px;color:var(--sage-deep);
+    margin-top:3px;
+  }
+  .rating-big{font-family:var(--font-display);font-size:38px;font-weight:800;margin:18px 0 4px;}
+  .rating-sub{font-family:var(--font-mono);font-size:12px;color:var(--ink-soft);margin-bottom:18px;}
+  .rating-bars{display:flex;flex-direction:column;gap:9px;}
+  .rbar-row{display:flex;align-items:center;gap:10px;font-size:12.5px;}
+  .rbar-row .label{width:100px;color:var(--ink-soft);flex-shrink:0;}
+  .rbar-track{flex:1;height:7px;background:var(--paper-deep);border-radius:999px;overflow:hidden;}
+  .rbar-fill{height:100%;background:var(--amber);border-radius:999px;}
+  .star-demo{margin-top:20px;padding-top:18px;border-top:1px dashed var(--line);}
+  .star-demo p{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-soft);margin-bottom:8px;}
+  .stars-input{display:flex;gap:4px;font-size:24px;}
+  .stars-input span{cursor:pointer;color:var(--line-dark);transition:color .1s;}
+  .stars-input span.on{color:var(--amber);}
+
+  .safety-list{display:flex;flex-direction:column;gap:22px;}
+  .safety-item{display:flex;gap:16px;}
+  .safety-icon{
+    width:42px;height:42px;border-radius:50%;background:var(--asphalt);color:var(--paper);flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .safety-item h4{font-family:var(--font-display);font-size:16.5px;margin-bottom:5px;}
+  .safety-item p{color:var(--ink-soft);font-size:14.5px;line-height:1.55;}
+
+  /* ---------- rewards ---------- */
+  .rewards-grid{display:grid;grid-template-columns:0.9fr 1.1fr;gap:56px;align-items:center;}
+  @media (max-width:900px){.rewards-grid{grid-template-columns:1fr;}}
+  .passport{
+    background:var(--asphalt);border-radius:var(--radius-m);padding:30px;color:var(--paper);
+    box-shadow:var(--shadow-card);
+  }
+  .passport .ptitle{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--amber);}
+  .passport h3{font-size:22px;margin-top:8px;}
+  .stamp-row{display:flex;gap:9px;margin-top:22px;flex-wrap:wrap;}
+  .stamp{
+    width:38px;height:38px;border-radius:50%;border:2px dashed var(--line-dark);display:flex;align-items:center;
+    justify-content:center;font-size:15px;color:var(--line-dark);
+  }
+  .stamp.done{
+    border:2px solid var(--amber);color:var(--amber);background:rgba(224,138,55,0.12);
+    transform:rotate(-8deg);
+  }
+  .passport .progress-text{font-family:var(--font-mono);font-size:12.5px;color:#C8C1B2;margin-top:14px;}
+  .tier-list{display:flex;flex-direction:column;gap:16px;}
+  .tier-row{
+    display:flex;justify-content:space-between;align-items:center;background:var(--white);
+    border:1px solid var(--line);border-radius:var(--radius-s);padding:16px 20px;
+  }
+  .tier-row b{font-family:var(--font-display);font-size:15.5px;}
+  .tier-row span{color:var(--ink-soft);font-size:13.5px;}
+  .tier-row .tier-badge{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:5px 11px;border-radius:999px;font-weight:700;}
+  .tier-badge.bronze{background:rgba(179,73,46,0.14);color:var(--rust);}
+  .tier-badge.silver{background:rgba(36,31,25,0.08);color:var(--ink-soft);}
+  .tier-badge.gold{background:rgba(224,138,55,0.2);color:var(--amber-deep);}
+
+  /* ---------- pricing ---------- */
+  .billing-toggle{display:flex;align-items:center;gap:12px;margin-bottom:36px;}
+  .billing-toggle .switch{
+    width:50px;height:28px;border-radius:999px;background:var(--asphalt);position:relative;cursor:pointer;flex-shrink:0;
+  }
+  .billing-toggle .switch .knob{
+    width:22px;height:22px;border-radius:50%;background:var(--paper);position:absolute;top:3px;left:3px;
+    transition:left .2s;
+  }
+  .billing-toggle .switch.on .knob{left:25px;}
+  .billing-toggle .save{font-family:var(--font-mono);font-size:11.5px;background:var(--sage);color:var(--white);padding:3px 9px;border-radius:999px;}
+  .pricing-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+  @media (max-width:1000px){.pricing-grid{grid-template-columns:repeat(2,1fr);}}
+  @media (max-width:600px){.pricing-grid{grid-template-columns:1fr;}}
+  .price-card{
+    background:var(--white);border:1.5px solid var(--line);border-radius:var(--radius-m);padding:26px 22px;
+    display:flex;flex-direction:column;
+  }
+  .price-card.highlight{border-color:var(--asphalt);box-shadow:0 16px 32px -20px rgba(36,31,25,0.45);position:relative;}
+  .price-card.highlight::before{
+    content:'Most popular';position:absolute;top:-12px;left:22px;background:var(--amber);color:var(--asphalt);
+    font-family:var(--font-mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:700;
+    padding:4px 10px;border-radius:999px;
+  }
+  .price-card h4{font-family:var(--font-display);font-size:17px;}
+  .price-card .price{font-family:var(--font-display);font-size:30px;font-weight:800;margin:14px 0 2px;}
+  .price-card .price small{font-family:var(--font-mono);font-size:12px;color:var(--ink-soft);font-weight:400;}
+  .price-card ul{list-style:none;margin:18px 0 22px;padding:0;display:flex;flex-direction:column;gap:9px;flex:1;}
+  .price-card li{font-size:13px;color:var(--ink-soft);display:flex;gap:8px;line-height:1.4;}
+  .price-card li::before{content:'✓';color:var(--sage-deep);font-weight:700;flex-shrink:0;}
+  .addons{margin-top:40px;padding-top:32px;border-top:1px solid var(--line);}
+  .addons-head{font-family:var(--font-mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:16px;}
+  .addons-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  @media (max-width:760px){.addons-grid{grid-template-columns:1fr;}}
+  .addon{background:var(--paper-deep);border-radius:var(--radius-s);padding:16px 18px;}
+  .addon b{font-size:14px;display:block;margin-bottom:4px;}
+  .addon span{font-size:12.5px;color:var(--ink-soft);}
+  .addon .addon-price{font-family:var(--font-mono);font-size:13px;color:var(--rust);font-weight:600;margin-top:8px;display:block;}
+
+  /* ---------- footer ---------- */
+  footer{background:var(--asphalt);color:var(--paper);padding:64px 0 36px;margin-top:40px;}
+  .foot-cta{text-align:center;max-width:520px;margin:0 auto 48px;}
+  .foot-cta h2{font-size:30px;color:var(--paper);}
+  .foot-cta p{color:#C8C1B2;margin-top:12px;font-size:15.5px;}
+  .foot-cta .btn{margin-top:24px;padding:14px 28px;}
+  .foot-bottom{
+    display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line-dark);
+    padding-top:24px;font-size:12.5px;color:#8c8576;flex-wrap:wrap;gap:10px;
+  }
+
+  /* ---------- modal ---------- */
+  .modal-bg{
+    position:fixed;inset:0;background:rgba(36,31,25,0.55);display:flex;align-items:center;justify-content:center;
+    z-index:100;opacity:0;visibility:hidden;transition:opacity .2s;padding:20px;
+  }
+  .modal-bg.open{opacity:1;visibility:visible;}
+  .modal{
+    background:var(--paper);border-radius:var(--radius-m);padding:34px;max-width:380px;width:100%;
+    box-shadow:0 30px 60px -20px rgba(0,0,0,0.4);transform:translateY(10px);transition:transform .2s;
+  }
+  .modal-bg.open .modal{transform:translateY(0);}
+  .modal h3{font-size:21px;}
+  .modal p.sub{color:var(--ink-soft);font-size:13.5px;margin-top:8px;}
+  .modal .field input{
+    background:var(--white);border:1.5px solid var(--line);color:var(--ink);
+  }
+  .modal .field label{color:var(--ink-soft);}
+  .modal-close{position:absolute;top:18px;right:18px;background:none;border:none;font-size:20px;color:var(--ink-soft);}
+  .modal{position:relative;}
+</style>
+</head>
+<body>
+
+<svg class="sprite" aria-hidden="true">
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.5 8.5 8 11 4.5-2.5 8-6 8-11V5l-8-3Z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8.5 12l2.5 2.5 5-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-4 4V5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 22s7-7.4 7-12.5A7 7 0 0 0 5 9.5C5 14.6 12 22 12 22Z" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="9.5" r="2.3" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <symbol id="i-contact" viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+</svg>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a class="logo" href="#top"><span class="dot"></span>RideM8</a>
+    <nav class="nav-links">
+      <a href="#try-it">How it works</a>
+      <a href="#browse-rides">Browse rides</a>
+      <a href="#trust-safety">Trust &amp; safety</a>
+      <a href="#rewards">Rewards</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#my-activity" id="nav-activity-link" style="display:none;">My activity</a>
+    </nav>
+    <div id="nav-auth-area">
+      <button class="btn btn-ghost" onclick="openModal('login')" style="margin-right:8px;">Log in</button>
+      <button class="btn btn-primary" onclick="openModal('signup')">Sign up free</button>
+    </div>
+  </div>
+</header>
+
+
+<section class="hero" id="top">
+  <div class="wrap hero-inner">
+    <div class="hero-copy">
+      <span class="eyebrow">Route-based ridesharing, for travellers</span>
+      <h1>Say where you're headed.<br>Someone's probably going there too.</h1>
+      <p class="sub">Post the route you need, or open up your spare seats. No surge pricing, no fixed taxi fares — just real travellers heading the same way, matched by road, not algorithm.</p>
+      <div class="hero-ctas">
+        <button class="btn btn-amber" onclick="scrollToTry('hitcher')">I need a ride →</button>
+        <button class="btn btn-ghost" onclick="scrollToTry('driver')">I've got space →</button>
+      </div>
+      <div class="hero-stats">
+        <div><b>1,204</b>routes posted this week</div>
+        <div><b>38</b>countries on the map</div>
+        <div><b>4.8★</b>average driver rating</div>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <div class="sign-card">
+        <span class="sign-pin">📍</span>
+        <div class="sign-route">WANAKA</div>
+        <div class="sign-arrow">↓ 68km</div>
+        <div class="sign-route">QUEENSTOWN</div>
+        <div class="sign-meta">TODAY, 2PM · 2 SEATS LEFT · CHIP IN FOR PETROL</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="try-it">
+  <div class="wrap demo">
+    <div class="section-head">
+      <span class="eyebrow">How it works</span>
+      <h2>Two roles. One road.</h2>
+      <p>Post a route as a hitcher, or list your spare seats as a driver. Either way, it takes under a minute.</p>
+    </div>
+
+    <div class="segmented" role="tablist">
+      <button class="active" data-mode="hitcher" onclick="setMode('hitcher')">I need a ride</button>
+      <button data-mode="driver" onclick="setMode('driver')">I've got space</button>
+    </div>
+
+    <div class="demo-grid">
+      <div>
+        <form class="panel active" id="form-hitcher" onsubmit="submitHitcher(event)">
+          <div class="row-2">
+            <div class="field"><label>From</label><input required placeholder="e.g. Wanaka" id="h-from"></div>
+            <div class="field"><label>To</label><input required placeholder="e.g. Queenstown" id="h-to"></div>
+          </div>
+          <div class="field"><label>When</label><input type="date" id="h-date"></div>
+          <div class="field"><label>How you'd like to contribute</label>
+            <div class="choice-grid">
+              <label class="choice"><input type="radio" name="h-contrib" value="Free to join" checked>Free to join</label>
+              <label class="choice"><input type="radio" name="h-contrib" value="I'll bring snacks">I'll bring snacks</label>
+              <label class="choice"><input type="radio" name="h-contrib" value="Happy to chip in for petrol">Chip in for petrol</label>
+              <label class="choice"><input type="radio" name="h-contrib" value="Pay what's listed">Pay what's listed</label>
+            </div>
+          </div>
+          <div class="field"><label>Note to drivers (optional)</label><textarea rows="2" placeholder="One big backpack, flexible on timing..." id="h-note"></textarea></div>
+          <div class="submit-row"><button type="submit" class="btn btn-amber">Post my route</button></div>
+        </form>
+
+        <form class="panel" id="form-driver" onsubmit="submitDriver(event)">
+          <div class="row-2">
+            <div class="field"><label>From</label><input required placeholder="e.g. Christchurch" id="d-from"></div>
+            <div class="field"><label>To</label><input required placeholder="e.g. Dunedin" id="d-to"></div>
+          </div>
+          <div class="field"><label>When</label><input type="date" id="d-date"></div>
+          <div class="field"><label>Seats available</label>
+            <div class="stepper">
+              <button type="button" onclick="stepSeats(-1)">−</button>
+              <span id="seat-count">2</span>
+              <button type="button" onclick="stepSeats(1)">+</button>
+            </div>
+          </div>
+          <div class="field"><label>What riders can offer</label>
+            <div class="choice-grid">
+              <label class="choice"><input type="radio" name="d-contrib" value="Free, just good company" checked>Free, just good company</label>
+              <label class="choice"><input type="radio" name="d-contrib" value="Snacks only">Snacks only</label>
+              <label class="choice"><input type="radio" name="d-contrib" value="Split the petrol">Split the petrol</label>
+              <label class="choice"><input type="radio" name="d-contrib" value="Set price" onclick="togglePrice(true)">Set a price</label>
+            </div>
+          </div>
+          <div class="field" id="price-field" style="display:none;"><label>Price per seat (NZD)</label><input type="number" min="1" placeholder="15" id="d-price"></div>
+          <div class="submit-row"><button type="submit" class="btn btn-amber">List my ride</button></div>
+        </form>
+      </div>
+
+      <div>
+        <div class="result-area" id="result-area">
+          <p style="color:#A39C8C;font-size:14px;max-width:320px;">Fill in the form and your listing preview — and who it reaches — shows up here.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="browse-rides">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Live listings</span>
+      <h2>On the road right now</h2>
+      <p>Every listing shows seats left, contribution type, and the driver's rating up front — no surprises when you get in the car.</p>
+    </div>
+    <div class="chips" id="chips">
+      <button class="chip active" data-filter="all">All</button>
+      <button class="chip" data-filter="free">Free</button>
+      <button class="chip" data-filter="snacks">Snacks</button>
+      <button class="chip" data-filter="petrol">Petrol split</button>
+      <button class="chip" data-filter="price">Set price</button>
+    </div>
+    <div class="ride-grid" id="ride-grid"><!-- populated by JS --></div>
+  </div>
+</section>
+
+<section id="trust-safety">
+  <div class="wrap trust-grid">
+    <div>
+      <div class="profile-card">
+        <div class="profile-top">
+          <div class="avatar" style="background:var(--amber);">JM</div>
+          <div>
+            <b>Jess M.</b>
+            <span class="verified"><svg width="13" height="13"><use href="#i-shield"/></svg> ID &amp; phone verified</span>
+          </div>
+        </div>
+        <div class="rating-big">4.9</div>
+        <div class="rating-sub">FROM 63 COMPLETED RIDES · DRIVER</div>
+        <div class="rating-bars">
+          <div class="rbar-row"><span class="label">Punctuality</span><div class="rbar-track"><div class="rbar-fill" style="width:96%;"></div></div></div>
+          <div class="rbar-row"><span class="label">Good company</span><div class="rbar-track"><div class="rbar-fill" style="width:91%;"></div></div></div>
+          <div class="rbar-row"><span class="label">Car condition</span><div class="rbar-track"><div class="rbar-fill" style="width:98%;"></div></div></div>
+          <div class="rbar-row"><span class="label">Felt safe</span><div class="rbar-track"><div class="rbar-fill" style="width:99%;"></div></div></div>
+        </div>
+        <div class="star-demo">
+          <p>Rate a ride you've just taken</p>
+          <div class="stars-input" id="star-input">
+            <span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <span class="eyebrow">Trust &amp; safety</span>
+      <h2 style="font-size:28px;margin-bottom:28px;">Strangers, sure. Unknown, never.</h2>
+      <div class="safety-list">
+        <div class="safety-item">
+          <div class="safety-icon"><svg width="20" height="20"><use href="#i-shield"/></svg></div>
+          <div><h4>ID and phone verification</h4><p>Every member confirms their identity and phone number before they can post a route or offer a seat. Verified badges show up on every listing.</p></div>
+        </div>
+        <div class="safety-item">
+          <div class="safety-icon"><svg width="20" height="20"><use href="#i-msg"/></svg></div>
+          <div><h4>Two-way ratings, every ride</h4><p>Drivers rate hitchers, hitchers rate drivers — on punctuality, company, and how safe the ride felt. Low scores surface before anyone gets in the car.</p></div>
+        </div>
+        <div class="safety-item">
+          <div class="safety-icon"><svg width="20" height="20"><use href="#i-pin"/></svg></div>
+          <div><h4>Share your live route</h4><p>Hitchers can share trip progress with a friend or family member for the duration of the ride, with one tap.</p></div>
+        </div>
+        <div class="safety-item">
+          <div class="safety-icon"><svg width="20" height="20"><use href="#i-contact"/></svg></div>
+          <div><h4>In-app chat before you meet</h4><p>Confirm pickup details over in-app messages first — no phone numbers exchanged until both sides are comfortable.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="rewards">
+  <div class="wrap rewards-grid">
+    <div class="passport">
+      <div class="ptitle">Loyalty stamps</div>
+      <h3>7 of 10 rides this season</h3>
+      <div class="stamp-row" id="stamp-row"></div>
+      <div class="progress-text">3 more rides to unlock <b style="color:var(--paper);">Silver status</b> — fee-free listings and priority placement.</div>
+    </div>
+    <div>
+      <span class="eyebrow">Rewards</span>
+      <h2 style="font-size:28px;margin-bottom:10px;">The more you give lifts, the less it costs you.</h2>
+      <p style="color:var(--ink-soft);margin-bottom:26px;">Every completed, well-rated ride earns a stamp. Stamps stack into status — and status pays for itself.</p>
+      <div class="tier-list">
+        <div class="tier-row"><div><b>Bronze</b><br><span>1–9 rides</span></div><span class="tier-badge bronze">Welcome perks</span></div>
+        <div class="tier-row"><div><b>Silver</b><br><span>10–29 rides</span></div><span class="tier-badge silver">Fee-free listings</span></div>
+        <div class="tier-row"><div><b>Gold</b><br><span>30+ rides</span></div><span class="tier-badge gold">Top placement + free annual plan</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="pricing">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Pricing</span>
+      <h2>Free to join. Pay for what you use.</h2>
+      <p>Most members never pay a cent. The platform makes money from a small per-ride fee, optional memberships for frequent drivers, and a few extras — never from raising the price of a ride itself.</p>
+    </div>
+    <div class="billing-toggle">
+      <div class="switch" id="billing-switch" onclick="toggleBilling()"><div class="knob"></div></div>
+      <span style="font-size:14px;">Bill annually</span>
+      <span class="save">Save ~20%</span>
+    </div>
+    <div class="pricing-grid">
+      <div class="price-card">
+        <h4>Free</h4>
+        <div class="price">$0</div>
+        <ul>
+          <li>Unlimited route posting</li>
+          <li>Browse &amp; message all listings</li>
+          <li>Full rating &amp; verification</li>
+          <li>Small fee only on priced rides</li>
+        </ul>
+        <button class="btn btn-ghost" onclick="openModal()">Get started</button>
+      </div>
+      <div class="price-card highlight">
+        <h4>Per ride</h4>
+        <div class="price">5%<small> of ride price</small></div>
+        <ul>
+          <li>Charged only when a price is set</li>
+          <li>Nothing taken from free/snack/petrol rides</li>
+          <li>Covers payment handling &amp; support</li>
+          <li>Capped at $3 per seat</li>
+        </ul>
+        <button class="btn btn-amber" onclick="openModal()">Get started</button>
+      </div>
+      <div class="price-card">
+        <h4>Driver Plus</h4>
+        <div class="price" id="price-monthly">$6<small>/mo</small></div>
+        <ul>
+          <li>Zero per-ride fees, ever</li>
+          <li>Boosted placement in search</li>
+          <li>Earnings &amp; mileage dashboard</li>
+          <li>Priority support</li>
+        </ul>
+        <button class="btn btn-ghost" onclick="startCheckout('subscribe', annual ? 'driverPlusAnnual' : 'driverPlusMonthly', this)">Start plan</button>
+      </div>
+      <div class="price-card">
+        <h4>Road Tripper</h4>
+        <div class="price" id="price-annual">$60<small>/yr</small></div>
+        <ul>
+          <li>Everything in Driver Plus</li>
+          <li>Free roadside-assist add-on</li>
+          <li>Two ride insurance credits</li>
+          <li>Early access to new routes &amp; features</li>
+        </ul>
+        <button class="btn btn-ghost" onclick="startCheckout('subscribe', 'roadTripperAnnual', this)">Start plan</button>
+      </div>
+    </div>
+
+    <div class="addons">
+      <div class="addons-head">Optional extras, à la carte</div>
+      <div class="addons-grid">
+        <div class="addon"><b>Listing boost</b><span>Top of search for 24 hours on a busy route</span><span class="addon-price">$2 one-off</span><button class="btn btn-ghost" style="margin-top:10px;width:100%;" onclick="startCheckout('addon', 'boost', this)">Add</button></div>
+        <div class="addon"><b>Per-ride insurance</b><span>Extra cover for a single long-distance trip</span><span class="addon-price">$3 one-off</span><button class="btn btn-ghost" style="margin-top:10px;width:100%;" onclick="startCheckout('addon', 'insurance', this)">Add</button></div>
+        <div class="addon"><b>Instant verification</b><span>Skip the queue, get your badge in minutes</span><span class="addon-price">$4 one-off</span><button class="btn btn-ghost" style="margin-top:10px;width:100%;" onclick="startCheckout('addon', 'verification', this)">Add</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="my-activity" style="display:none;">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Your account</span>
+      <h2>My activity</h2>
+    </div>
+
+    <div class="trust-grid" style="margin-bottom:48px;">
+      <div class="profile-card">
+        <div class="profile-top">
+          <div class="avatar" id="me-avatar" style="background:var(--amber);">—</div>
+          <div>
+            <b id="me-name">—</b>
+            <span class="verified" id="me-connect-status"></span>
+          </div>
+        </div>
+        <div class="rating-big" id="me-rating">—</div>
+        <div class="rating-sub" id="me-rating-sub">NO RIDES YET</div>
+        <div id="me-connect-action" style="margin-top:18px;"></div>
+      </div>
+      <div>
+        <h3 style="font-size:18px;margin-bottom:14px;">Loyalty progress</h3>
+        <div class="stamp-row" id="me-stamp-row"></div>
+        <p style="color:var(--ink-soft);font-size:13.5px;margin-top:14px;" id="me-stamp-text"></p>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
+      <div>
+        <h3 style="font-size:18px;margin-bottom:14px;">Rides I'm offering</h3>
+        <div id="my-rides-list" style="display:flex;flex-direction:column;gap:12px;"></div>
+      </div>
+      <div>
+        <h3 style="font-size:18px;margin-bottom:14px;">Rides I've booked</h3>
+        <div id="my-bookings-list" style="display:flex;flex-direction:column;gap:12px;"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-cta">
+      <h2>Your back seat is worth something.</h2>
+      <p>Whether you're hitching across one country or driving across three, there's someone going your way. Sign up in under a minute — no credit card needed.</p>
+      <button class="btn btn-amber" onclick="openModal()">Sign up free</button>
+    </div>
+    <div class="foot-bottom">
+      <span>© 2026 RideM8. A prototype concept.</span>
+      <span>Made for travellers, by travellers.</span>
+    </div>
+  </div>
+</footer>
+
+<div class="modal-bg" id="modal-bg" onclick="closeModalBg(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">×</button>
+
+    <div class="segmented" style="margin-bottom:20px;">
+      <button class="active" data-authmode="signup" onclick="setAuthMode('signup')">Sign up</button>
+      <button data-authmode="login" onclick="setAuthMode('login')">Log in</button>
+    </div>
+
+    <div id="auth-error" style="display:none;color:var(--rust);font-size:13.5px;margin-bottom:14px;"></div>
+
+    <form id="signup-form" onsubmit="handleSignup(event)">
+      <h3>Join RideM8</h3>
+      <p class="sub">30 seconds. No credit card. Just you and your next route.</p>
+      <div class="field" style="margin-top:22px;"><label>Name</label><input required id="su-name" placeholder="Your name"></div>
+      <div class="field"><label>Email</label><input required type="email" id="su-email" placeholder="you@email.com"></div>
+      <div class="field"><label>Password</label><input required type="password" minlength="8" id="su-password" placeholder="At least 8 characters"></div>
+      <div class="field"><label>I'm joining as</label>
+        <select id="su-role">
+          <option value="hitcher">A traveller looking for rides</option>
+          <option value="driver">A driver with space to share</option>
+          <option value="both" selected>Both</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%;margin-top:6px;padding:13px;">Create my account</button>
+    </form>
+
+    <form id="login-form" style="display:none;" onsubmit="handleLogin(event)">
+      <h3>Welcome back</h3>
+      <p class="sub">Log in to post routes, book rides, and check your rating.</p>
+      <div class="field" style="margin-top:22px;"><label>Email</label><input required type="email" id="li-email" placeholder="you@email.com"></div>
+      <div class="field"><label>Password</label><input required type="password" id="li-password" placeholder="Your password"></div>
+      <button type="submit" class="btn btn-primary" style="width:100%;margin-top:6px;padding:13px;">Log in</button>
+    </form>
+  </div>
+</div>
+
+
+<script>
+  let currentUser = null;
+  const CONTRIB_MAP = {
+    'Free, just good company': 'free',
+    'Snacks only': 'snacks',
+    'Split the petrol': 'petrol',
+    'Set a price': 'price',
+  };
+  const typeLabel = { free: 'Free', snacks: 'Snacks', petrol: 'Petrol split', price: 'Set price' };
+
+  async function api(path, opts = {}) {
+    const res = await fetch(path, {
+      method: opts.method || 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Something went wrong.');
+    return data;
+  }
+
+  // ---------- auth state ----------
+  async function checkAuth() {
+    try {
+      const { user } = await api('/auth/me');
+      currentUser = user;
+    } catch {
+      currentUser = null;
+    }
+    renderAuthState();
+  }
+
+  function renderAuthState() {
+    const authArea = document.getElementById('nav-auth-area');
+    const activityLink = document.getElementById('nav-activity-link');
+    if (currentUser) {
+      authArea.innerHTML = `
+        <span style="font-size:13.5px;color:var(--ink-soft);margin-right:12px;">Hi, ${currentUser.name.split(' ')[0]}</span>
+        <button class="btn btn-ghost" onclick="logout()">Log out</button>`;
+      activityLink.style.display = 'inline';
+      document.getElementById('my-activity').style.display = 'block';
+      loadMyActivity();
+    } else {
+      authArea.innerHTML = `
+        <button class="btn btn-ghost" onclick="openModal('login')" style="margin-right:8px;">Log in</button>
+        <button class="btn btn-primary" onclick="openModal('signup')">Sign up free</button>`;
+      activityLink.style.display = 'none';
+      document.getElementById('my-activity').style.display = 'none';
+    }
+  }
+
+  function setAuthMode(mode) {
+    document.querySelectorAll('[data-authmode]').forEach(b => b.classList.toggle('active', b.dataset.authmode === mode));
+    document.getElementById('signup-form').style.display = mode === 'signup' ? 'block' : 'none';
+    document.getElementById('login-form').style.display = mode === 'login' ? 'block' : 'none';
+    document.getElementById('auth-error').style.display = 'none';
+  }
+
+  function showAuthError(msg) {
+    const el = document.getElementById('auth-error');
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  async function handleSignup(e) {
+    e.preventDefault();
+    try {
+      const { user } = await api('/auth/signup', {
+        method: 'POST',
+        body: {
+          name: document.getElementById('su-name').value,
+          email: document.getElementById('su-email').value,
+          password: document.getElementById('su-password').value,
+          role: document.getElementById('su-role').value,
+        },
+      });
+      currentUser = user;
+      closeModal();
+      renderAuthState();
+    } catch (err) {
+      showAuthError(err.message);
+    }
+  }
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    try {
+      const { user } = await api('/auth/login', {
+        method: 'POST',
+        body: { email: document.getElementById('li-email').value, password: document.getElementById('li-password').value },
+      });
+      currentUser = user;
+      closeModal();
+      renderAuthState();
+    } catch (err) {
+      showAuthError(err.message);
+    }
+  }
+
+  async function logout() {
+    await api('/auth/logout', { method: 'POST' });
+    currentUser = null;
+    renderAuthState();
+  }
+
+  // ---------- mode switch (try it) ----------
+  function setMode(mode){
+    document.querySelectorAll('.segmented[role="tablist"] button').forEach(b=>b.classList.toggle('active', b.dataset.mode===mode));
+    document.getElementById('form-hitcher').classList.toggle('active', mode==='hitcher');
+    document.getElementById('form-driver').classList.toggle('active', mode==='driver');
+    document.getElementById('result-area').innerHTML = '<p style="color:#A39C8C;font-size:14px;max-width:320px;">Fill in the form and your listing preview — and who it reaches — shows up here.</p>';
+  }
+  function scrollToTry(mode){
+    setMode(mode);
+    document.getElementById('try-it').scrollIntoView({behavior:'smooth', block:'start'});
+  }
+
+  // ---------- choice highlight ----------
+  document.querySelectorAll('.choice input').forEach(inp=>{
+    inp.addEventListener('change', ()=>{
+      document.querySelectorAll('input[name="'+inp.name+'"]').forEach(i=>{
+        i.closest('.choice').classList.toggle('checked', i.checked);
+      });
+    });
+  });
+  document.querySelectorAll('input[name="h-contrib"], input[name="d-contrib"]').forEach(i=>{
+    if(i.checked) i.closest('.choice').classList.add('checked');
+  });
+
+  function togglePrice(show){
+    document.getElementById('price-field').style.display = show ? 'block' : 'none';
+  }
+  document.querySelectorAll('input[name="d-contrib"]').forEach(i=>{
+    i.addEventListener('change', ()=> togglePrice(i.value==='Set price'));
+  });
+
+  // ---------- seat stepper ----------
+  let seats = 2;
+  function stepSeats(d){
+    seats = Math.max(1, Math.min(6, seats+d));
+    document.getElementById('seat-count').textContent = seats;
+  }
+
+  // ---------- post a route request (hitcher) ----------
+  async function submitHitcher(e){
+    e.preventDefault();
+    const from = document.getElementById('h-from').value || 'Wanaka';
+    const to = document.getElementById('h-to').value || 'Queenstown';
+    const contrib = document.querySelector('input[name="h-contrib"]:checked').value;
+    const note = document.getElementById('h-note').value;
+    const date = document.getElementById('h-date').value;
+
+    let savedLine = `<p style="font-family:var(--font-mono);font-size:11.5px;color:var(--amber);margin-bottom:0;">LOG IN TO SAVE THIS FOR REAL — RIGHT NOW IT'S JUST A PREVIEW</p>`;
+    if (currentUser) {
+      try {
+        await api('/route-requests', { method: 'POST', body: { from, to, date, contributionPref: contrib, note } });
+        savedLine = `<p style="font-family:var(--font-mono);font-size:11.5px;color:var(--sage);margin-bottom:0;">✓ SAVED TO YOUR ACCOUNT</p>`;
+      } catch (err) {
+        savedLine = `<p style="font-family:var(--font-mono);font-size:11.5px;color:var(--rust);margin-bottom:0;">${err.message.toUpperCase()}</p>`;
+      }
+    }
+
+    document.getElementById('result-area').innerHTML = `
+      <div class="fade-in result-sign">
+        <div class="rt">${from.toUpperCase()}</div>
+        <div style="font-family:var(--font-mono);color:var(--rust);margin:4px 0;">↓</div>
+        <div class="rt">${to.toUpperCase()}</div>
+        <div class="meta">${contrib.toUpperCase()} · LIVE NOW</div>
+      </div>
+      <div class="match-list fade-in">
+        ${savedLine}
+        <div class="match-row"><div class="avatar">JM</div><div class="info"><b>Jess M. · 4.9★</b><span>Leaving in 40 min · 2 seats</span></div><span class="tag">Petrol split</span></div>
+        <div class="match-row"><div class="avatar">TK</div><div class="info"><b>Theo K. · 4.7★</b><span>Leaving 3:30pm · 1 seat</span></div><span class="tag">Free</span></div>
+      </div>`;
+  }
+
+  // ---------- offer a ride (driver) ----------
+  async function submitDriver(e){
+    e.preventDefault();
+    const from = document.getElementById('d-from').value || 'Christchurch';
+    const to = document.getElementById('d-to').value || 'Dunedin';
+    const contribLabel = document.querySelector('input[name="d-contrib"]:checked').value;
+    const contribType = CONTRIB_MAP[contribLabel];
+    const price = document.getElementById('d-price').value;
+    const date = document.getElementById('d-date').value;
+    const priceLine = contribType==='price' && price ? `Estimated $${(price*seats)} if all seats fill` : 'No payment to collect — just good company';
+
+    let savedLine = `<p style="font-family:var(--font-mono);font-size:11.5px;color:var(--amber);margin-bottom:0;">LOG IN TO POST THIS AS A REAL, BOOKABLE LISTING</p>`;
+    if (currentUser) {
+      try {
+        await api('/rides', {
+          method: 'POST',
+          body: { from, to, date, seats, contributionType: contribType, priceCents: price ? Math.round(price * 100) : null },
+        });
+        savedLine = `<p style="font-family:var(--font-mono);font-size:11.5px;color:var(--sage);margin-bottom:0;">✓ POSTED — VISIBLE ON THE BROWSE PAGE NOW</p>`;
+        loadRides();
+        loadMyActivity();
+      } catch (err) {
+        savedLine = `<p style="font-family:var(--font-mono);font-size:11.5px;color:var(--rust);margin-bottom:0;">${err.message.toUpperCase()}</p>`;
+      }
+    }
+
+    document.getElementById('result-area').innerHTML = `
+      <div class="fade-in result-sign">
+        <div class="rt">${from.toUpperCase()}</div>
+        <div style="font-family:var(--font-mono);color:var(--rust);margin:4px 0;">↓</div>
+        <div class="rt">${to.toUpperCase()}</div>
+        <div class="meta">${seats} SEAT${seats>1?'S':''} · ${contribLabel.toUpperCase()}</div>
+      </div>
+      <div class="match-list fade-in">
+        ${savedLine}
+        <p style="font-family:var(--font-mono);font-size:11.5px;color:#A39C8C;margin:10px 0 0;">${priceLine.toUpperCase()}</p>
+      </div>`;
+  }
+
+  // ---------- browse rides (real data) ----------
+  let allRides = [];
+  async function loadRides(){
+    try {
+      const { rides } = await api('/rides');
+      allRides = rides;
+    } catch {
+      allRides = [];
+    }
+    renderRides(document.querySelector('.chip.active')?.dataset.filter || 'all');
+  }
+
+  function renderRides(filter){
+    const grid = document.getElementById('ride-grid');
+    const filtered = allRides.filter(r => filter === 'all' || r.contributionType === filter);
+    if (filtered.length === 0) {
+      grid.innerHTML = `<p style="color:var(--ink-soft);font-size:14px;grid-column:1/-1;">No rides posted yet${filter!=='all' ? ' in this category' : ''} — be the first! Use "I've got space" above.</p>`;
+      return;
+    }
+    grid.innerHTML = filtered.map(r => `
+      <div class="ride-card">
+        <div class="route">${r.from}<span class="arrow">→</span>${r.to}</div>
+        <div class="when">${r.date || 'Flexible'}</div>
+        <div class="driver">
+          <div class="avatar" style="width:26px;height:26px;font-size:11px;">${r.driverName.split(' ').map(n=>n[0]).join('')}</div>
+          <span class="name">${r.driverName}</span>
+          <span class="stars">${r.driverRating ? r.driverRating + '★' : 'New driver'}</span>
+        </div>
+        <div class="foot">
+          <span class="badge ${r.contributionType}">${typeLabel[r.contributionType]}${r.contributionType==='price' ? ' · $'+(r.priceCents/100).toFixed(0) : ''}</span>
+          <span class="seats-left">${r.seatsAvailable} seat${r.seatsAvailable>1?'s':''} left</span>
+        </div>
+        <button class="btn btn-amber" style="width:100%;margin-top:14px;" onclick="bookRide('${r.id}', this)">Request seat</button>
+      </div>
+    `).join('');
+  }
+
+  async function bookRide(rideId, btn){
+    if (!currentUser) return openModal('signup');
+    const original = btn.textContent;
+    btn.textContent = 'Booking…';
+    btn.disabled = true;
+    try {
+      const data = await api(`/rides/${rideId}/book`, { method: 'POST' });
+      if (data.url) {
+        window.location = data.url;
+      } else {
+        btn.textContent = '✓ Requested';
+        loadRides();
+        loadMyActivity();
+      }
+    } catch (err) {
+      alert(err.message);
+      btn.textContent = original;
+      btn.disabled = false;
+    }
+  }
+
+  document.getElementById('chips').addEventListener('click', e=>{
+    if(!e.target.classList.contains('chip')) return;
+    document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+    e.target.classList.add('active');
+    renderRides(e.target.dataset.filter);
+  });
+
+  // ---------- star rating demo (illustrative, in the Trust section) ----------
+  document.querySelectorAll('#star-input span').forEach(star=>{
+    star.addEventListener('click', ()=>{
+      const v = +star.dataset.v;
+      document.querySelectorAll('#star-input span').forEach(s=> s.classList.toggle('on', +s.dataset.v <= v));
+    });
+  });
+
+  // ---------- rewards stamps (static explainer version) ----------
+  const stampRow = document.getElementById('stamp-row');
+  for(let i=1;i<=10;i++){
+    const d = document.createElement('div');
+    d.className = 'stamp' + (i<=7 ? ' done' : '');
+    d.textContent = i<=7 ? '✓' : i;
+    stampRow.appendChild(d);
+  }
+
+  // ---------- billing toggle ----------
+  let annual = false;
+  function toggleBilling(){
+    annual = !annual;
+    document.getElementById('billing-switch').classList.toggle('on', annual);
+    document.getElementById('price-monthly').innerHTML = annual ? '$58<small>/yr</small>' : '$6<small>/mo</small>';
+    document.getElementById('price-annual').innerHTML = annual ? '$60<small>/yr</small>' : '$6<small>/mo equiv.</small>';
+  }
+
+  // ---------- modal ----------
+  function openModal(mode){ setAuthMode(mode || 'signup'); document.getElementById('modal-bg').classList.add('open'); }
+  function closeModal(){ document.getElementById('modal-bg').classList.remove('open'); }
+  function closeModalBg(e){ if(e.target.id==='modal-bg') closeModal(); }
+
+  // ---------- real Stripe checkout (subscriptions & add-ons) ----------
+  async function startCheckout(kind, priceKey, btn){
+    const original = btn.textContent;
+    btn.textContent = 'Loading…';
+    btn.disabled = true;
+    try{
+      const endpoint = kind === 'subscribe' ? '/subscribe' : '/addons/checkout';
+      const data = await api(endpoint, { method: 'POST', body: { priceKey } });
+      if(data.url){
+        window.location = data.url;
+      } else {
+        alert(data.error || 'Something went wrong starting checkout.');
+        btn.textContent = original;
+        btn.disabled = false;
+      }
+    } catch(err){
+      alert('Payments backend isn\'t reachable yet, or "npm run setup" hasn\'t been run. Once it has, this button goes straight to a real Stripe checkout.');
+      btn.textContent = original;
+      btn.disabled = false;
+    }
+  }
+
+  // ---------- my activity dashboard ----------
+  async function loadMyActivity(){
+    if (!currentUser) return;
+    document.getElementById('me-avatar').textContent = currentUser.name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+    document.getElementById('me-name').textContent = currentUser.name;
+    document.getElementById('me-rating').textContent = currentUser.ratingAvg ? currentUser.ratingAvg + '' : '—';
+    document.getElementById('me-rating-sub').textContent = currentUser.ratingCount
+      ? `FROM ${currentUser.ratingCount} RATING${currentUser.ratingCount>1?'S':''} · ${currentUser.ridesCompleted} RIDES COMPLETED`
+      : 'NO RATINGS YET';
+
+    const connectStatusEl = document.getElementById('me-connect-status');
+    const connectActionEl = document.getElementById('me-connect-action');
+    if (currentUser.chargesEnabled) {
+      connectStatusEl.innerHTML = `<svg width="13" height="13"><use href="#i-shield"/></svg> Stripe connected — ready for priced rides`;
+      connectActionEl.innerHTML = '';
+    } else if (currentUser.role !== 'hitcher') {
+      connectStatusEl.innerHTML = '';
+      connectActionEl.innerHTML = `<button class="btn btn-amber" style="width:100%;" onclick="connectStripe(this)">Connect with Stripe to offer priced rides</button>`;
+    } else {
+      connectStatusEl.innerHTML = '';
+      connectActionEl.innerHTML = '';
+    }
+
+    const stamps = currentUser.ridesCompleted % 10 || (currentUser.ridesCompleted > 0 ? 10 : 0);
+    const row = document.getElementById('me-stamp-row');
+    row.innerHTML = '';
+    for (let i = 1; i <= 10; i++) {
+      const d = document.createElement('div');
+      d.className = 'stamp' + (i <= stamps ? ' done' : '');
+      d.textContent = i <= stamps ? '✓' : i;
+      row.appendChild(d);
+    }
+    document.getElementById('me-stamp-text').textContent = stamps >= 10
+      ? 'Silver status unlocked — fee-free listings are live on your account.'
+      : `${10 - stamps} more completed ride${10-stamps===1?'':'s'} to unlock Silver status.`;
+
+    try {
+      const { ridesOffered, bookingsAsDriver, bookingsAsHitcher } = await api('/me/activity');
+      renderMyRides(ridesOffered, bookingsAsDriver);
+      renderMyBookings(bookingsAsHitcher);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function connectStripe(btn){
+    btn.textContent = 'Redirecting…';
+    btn.disabled = true;
+    try {
+      const data = await api('/drivers/connect-account', { method: 'POST' });
+      window.location = data.url;
+    } catch (err) {
+      alert(err.message);
+      btn.textContent = 'Connect with Stripe to offer priced rides';
+      btn.disabled = false;
+    }
+  }
+
+  function renderMyRides(rides, bookings){
+    const el = document.getElementById('my-rides-list');
+    if (!rides.length) { el.innerHTML = `<p style="color:var(--ink-soft);font-size:14px;">You haven't offered a ride yet — try "I've got space" above.</p>`; return; }
+    el.innerHTML = rides.map(r => {
+      const ridesBookings = bookings.filter(b => b.ride_id === r.id);
+      return `
+        <div class="ride-card">
+          <div class="route">${r.from_loc}<span class="arrow">→</span>${r.to_loc}</div>
+          <div class="when">${r.ride_date || 'Flexible'} · ${r.seats_available}/${r.seats_total} seats left</div>
+          ${ridesBookings.map(b => `
+            <div class="match-row" style="margin-top:10px;">
+              <div class="avatar">${b.hitcher_name.split(' ').map(n=>n[0]).join('')}</div>
+              <div class="info"><b>${b.hitcher_name}</b><span>${b.status}</span></div>
+              ${['confirmed','paid'].includes(b.status)
+                ? `<button class="btn btn-ghost" style="padding:8px 12px;font-size:12.5px;" onclick="completeBooking('${b.id}', this)">Mark complete</button>`
+                : b.status === 'completed' ? `<span class="tag">Done</span>` : ''}
+            </div>`).join('')}
+        </div>`;
+    }).join('');
+  }
+
+  function renderMyBookings(bookings){
+    const el = document.getElementById('my-bookings-list');
+    if (!bookings.length) { el.innerHTML = `<p style="color:var(--ink-soft);font-size:14px;">No bookings yet — browse rides above and request a seat.</p>`; return; }
+    el.innerHTML = bookings.map(b => `
+      <div class="ride-card">
+        <div class="route">${b.from_loc}<span class="arrow">→</span>${b.to_loc}</div>
+        <div class="when">Driver: ${b.driver_name} · ${b.status}</div>
+        ${b.status === 'completed' ? `<div id="rate-${b.id}" style="margin-top:12px;">
+          <button class="btn btn-amber" style="width:100%;" onclick="openRating('${b.id}')">Rate this ride</button>
+        </div>` : ''}
+      </div>
+    `).join('');
+  }
+
+  async function completeBooking(bookingId, btn){
+    btn.textContent = 'Marking…';
+    btn.disabled = true;
+    try {
+      await api(`/bookings/${bookingId}/complete`, { method: 'POST' });
+      loadMyActivity();
+    } catch (err) {
+      alert(err.message);
+      btn.disabled = false;
+      btn.textContent = 'Mark complete';
+    }
+  }
+
+  function openRating(bookingId){
+    const stars = prompt('How many stars (1-5)?', '5');
+    if (!stars) return;
+    api(`/bookings/${bookingId}/rate`, { method: 'POST', body: { stars: Number(stars) } })
+      .then(() => { alert('Thanks for rating!'); loadMyActivity(); checkAuth(); })
+      .catch(err => alert(err.message));
+  }
+
+  // ---------- boot ----------
+  checkAuth();
+  loadRides();
+</script>
+</body>
+</html>
