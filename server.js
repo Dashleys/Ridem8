@@ -104,6 +104,8 @@ function publicProfile(u) {
     ridesCompleted: u.rides_completed,
     ratingAvg: u.rating_count ? Math.round((u.rating_sum/u.rating_count)*10)/10 : null,
     ratingCount: u.rating_count,
+    subscriptionTier: u.subscription_tier,
+    subscriptionStatus: u.subscription_status,
   };
 }
 function loadPrices() {

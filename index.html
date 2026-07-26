@@ -696,6 +696,7 @@
         <div class="rating-big" id="me-rating">—</div>
         <div class="rating-sub" id="me-rating-sub">NO RIDES YET</div>
         <div id="me-connect-action" style="margin-top:18px;"></div>
+        <div id="me-subscription" style="margin-top:12px;"></div>
       </div>
       <div>
         <h3 style="font-size:18px;margin-bottom:14px;">Loyalty progress</h3>
@@ -1123,6 +1124,17 @@
     } else {
       connectStatusEl.innerHTML = '';
       connectActionEl.innerHTML = '';
+    }
+    const tierNames = {
+      driverPlusMonthly: 'Driver Plus (monthly)',
+      driverPlusAnnual: 'Driver Plus (annual)',
+      roadTripperAnnual: 'Road Tripper',
+    };
+    const subEl = document.getElementById('me-subscription');
+    if (currentUser.subscriptionStatus === 'active' && currentUser.subscriptionTier) {
+      subEl.innerHTML = `<span class="verified" style="display:inline-flex;align-items:center;gap:6px;"><svg width="13" height="13"><use href="#i-shield"/></svg> ${tierNames[currentUser.subscriptionTier] || currentUser.subscriptionTier} — active</span>`;
+    } else {
+      subEl.innerHTML = '';
     }
 
     const stamps = currentUser.ridesCompleted % 10 || (currentUser.ridesCompleted > 0 ? 10 : 0);
