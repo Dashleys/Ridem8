@@ -244,6 +244,8 @@ app.post('/rides', requireAuth, async (req, res) => {
     const { from, to, date, seats, contributionType, priceCents, petrolNote } = req.body;
     if (!from||!to||!seats||!contributionType)
       return res.status(400).json({ error: 'From, to, seats and contribution type are required.' });
+    if (date && date < new Date().toISOString().split('T')[0])
+      return res.status(400).json({ error: 'Please choose a date from today onwards.' });
     if (containsBlockedContent(petrolNote)) return res.status(400).json({ error: 'Please remove inappropriate language from your note.' });
     if (contributionType === 'price') {
       const { rows } = await pool.query('SELECT charges_enabled FROM users WHERE id = $1', [req.userId]);
@@ -267,6 +269,8 @@ app.post('/route-requests', requireAuth, async (req, res) => {
   try {
     const { from, to, date, contributionPref, note } = req.body;
     if (!from||!to) return res.status(400).json({ error: 'From and to are required.' });
+    if (date && date < new Date().toISOString().split('T')[0])
+      return res.status(400).json({ error: 'Please choose a date from today onwards.' });
     if (containsBlockedContent(note)) return res.status(400).json({ error: 'Please remove inappropriate language from your note.' });
     const id = crypto.randomUUID();
     await pool.query(

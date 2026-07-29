@@ -775,6 +775,13 @@
 
 <script>
   let currentUser = null;
+  (function(){
+    const todayStr = new Date().toISOString().split('T')[0];
+    const dDate = document.getElementById('d-date');
+    const hDate = document.getElementById('h-date');
+    if (dDate) dDate.min = todayStr;
+    if (hDate) hDate.min = todayStr;
+  })();
   function fmtDate(d){
     if (!d) return '';
     const parts = d.split('-');
