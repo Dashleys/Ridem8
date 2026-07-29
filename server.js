@@ -49,7 +49,7 @@ async function initDb() {
       id TEXT PRIMARY KEY, driver_id TEXT NOT NULL REFERENCES users(id),
       from_loc TEXT NOT NULL, to_loc TEXT NOT NULL, ride_date TEXT,
       seats_total INTEGER NOT NULL, seats_available INTEGER NOT NULL,
-      contribution_type TEXT NOT NULL, price_cents INTEGER,
+      contribution_type TEXT NOT NULL, price_cents INTEGER, petrol_note TEXT,
       status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL
     );
   `);
@@ -241,9 +241,10 @@ app.post('/drivers/connect-account', requireAuth, async (req, res) => {
 
 app.post('/rides', requireAuth, async (req, res) => {
   try {
-    const { from, to, date, seats, contributionType, priceCents } = req.body;
+    const { from, to, date, seats, contributionType, priceCents, petrolNote } = req.body;
     if (!from||!to||!seats||!contributionType)
       return res.status(400).json({ error: 'From, to, seats and contribution type are required.' });
+    if (containsBlockedContent(petrolNote)) return res.status(400).json({ error: 'Please remove inappropriate language from your note.' });
     if (contributionType === 'price') {
       const { rows } = await pool.query('SELECT charges_enabled FROM users WHERE id = $1', [req.userId]);
       const driver = rows[0];
@@ -254,8 +255,8 @@ app.post('/rides', requireAuth, async (req, res) => {
     }
     const id = crypto.randomUUID();
     await pool.query(
-      `INSERT INTO rides (id,driver_id,from_loc,to_loc,ride_date,seats_total,seats_available,contribution_type,price_cents,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [id, req.userId, from.trim(), to.trim(), date||null, seats, seats, contributionType, priceCents||null, now()]
+      `INSERT INTO rides (id,driver_id,from_loc,to_loc,ride_date,seats_total,seats_available,contribution_type,price_cents,petrol_note,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [id, req.userId, from.trim(), to.trim(), date||null, seats, seats, contributionType, priceCents||null, petrolNote||null, now()]
     );
     const { rows } = await pool.query('SELECT * FROM rides WHERE id = $1', [id]);
     res.json({ ride: rows[0] });
@@ -294,7 +295,7 @@ app.get('/rides', async (req, res) => {
     res.json({ rides: rows.map(r => ({
       id: r.id, from: r.from_loc, to: r.to_loc, date: r.ride_date,
       seatsAvailable: r.seats_available, contributionType: r.contribution_type,
-      priceCents: r.price_cents, driverName: r.driver_name,
+      priceCents: r.price_cents, petrolNote: r.petrol_note, driverName: r.driver_name,
       driverRating: r.rating_count ? Math.round((r.rating_sum/r.rating_count)*10)/10 : null,
     })) });
   } catch (err) { res.status(500).json({ error: err.message }); }
