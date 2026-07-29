@@ -774,6 +774,12 @@
 
 <script>
   let currentUser = null;
+  function fmtDate(d){
+    if (!d) return '';
+    const parts = d.split('-');
+    if (parts.length !== 3) return d;
+    return parts[2] + '/' + parts[1] + '/' + parts[0];
+  }
   const CONTRIB_MAP = {
     'Free, just good company': 'free',
     'Snacks only': 'snacks',
@@ -1009,7 +1015,7 @@
     grid.innerHTML = filtered.map(r => `
       <div class="ride-card">
         <div class="route">${r.from}<span class="arrow">→</span>${r.to}</div>
-        <div class="when">${r.date || 'Flexible'}</div>
+        <div class="when">${fmtDate(r.date) || 'Flexible'}</div>
         <div class="driver">
           <div class="avatar" style="width:26px;height:26px;font-size:11px;">${r.driverName.split(' ').map(n=>n[0]).join('')}</div>
           <span class="name">${r.driverName}</span>
@@ -1182,7 +1188,7 @@
       return `
         <div class="ride-card">
           <div class="route">${r.from_loc}<span class="arrow">→</span>${r.to_loc}</div>
-          <div class="when">${r.ride_date || 'Flexible'} · ${r.seats_available}/${r.seats_total} seats left</div>
+          <div class="when">${fmtDate(r.ride_date) || 'Flexible'} · ${r.seats_available}/${r.seats_total} seats left</div>
           ${ridesBookings.map(b => `
             <div class="match-row" style="margin-top:10px;">
               <div class="avatar">${b.hitcher_name.split(' ').map(n=>n[0]).join('')}</div>
