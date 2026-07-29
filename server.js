@@ -355,6 +355,7 @@ app.post('/bookings/:id/rate', requireAuth, async (req, res) => {
   try {
     const { stars, comment } = req.body;
     if (!stars||stars<1||stars>5) return res.status(400).json({ error: 'Stars must be 1-5.' });
+    if (containsBlockedContent(comment)) return res.status(400).json({ error: 'Please remove inappropriate language from your comment.' });
     const { rows: bookingRows } = await pool.query('SELECT * FROM bookings WHERE id=$1', [req.params.id]);
     const booking = bookingRows[0];
     if (!booking||booking.status!=='completed') return res.status(400).json({ error: 'Can only rate completed rides.' });
