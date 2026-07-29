@@ -113,6 +113,21 @@ function loadPrices() {
 }
 const now = () => new Date().toISOString();
 
+const BLOCKED_TERMS = [
+  'fuck', 'shit', 'bitch', 'asshole', 'cunt', 'bastard', 'dick', 'pussy',
+  'cock', 'whore', 'slut', 'nigger', 'faggot', 'retard',
+  'hookup', 'hook up', 'dtf', 'nudes', 'sext', 'sexting',
+  'want to fuck', 'wanna fuck', 'looking for sex', 'nsa fun', 'fwb',
+];
+function containsBlockedContent(text) {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  return BLOCKED_TERMS.some(term => {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp('\\b' + escaped + '\\b', 'i').test(lower);
+  });
+}
+
 // ── Express ────────────────────────────────────────────────────────────────
 const app = express();
 
@@ -251,6 +266,7 @@ app.post('/route-requests', requireAuth, async (req, res) => {
   try {
     const { from, to, date, contributionPref, note } = req.body;
     if (!from||!to) return res.status(400).json({ error: 'From and to are required.' });
+    if (containsBlockedContent(note)) return res.status(400).json({ error: 'Please remove inappropriate language from your note.' });
     const id = crypto.randomUUID();
     await pool.query(
       `INSERT INTO route_requests (id,hitcher_id,from_loc,to_loc,request_date,contribution_pref,note,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
