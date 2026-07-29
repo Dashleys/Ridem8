@@ -938,7 +938,7 @@
     if (currentUser) {
       try {
         await api('/route-requests', { method: 'POST', body: { from, to, date, contributionPref: contrib, note } });
-        savedLine = `<p style="font-family:var(--font-mono);font-size:11.5px;color:var(--sage);margin-bottom:0;">✓ SAVED TO YOUR ACCOUNT</p>`;
+        savedLine = `<p style="font-family:var(--font-mono);font-size:11.5px;color:var(--sage);margin-bottom:0;">✓ RIDE REQUEST POSTED — VISIBLE TO DRIVERS NOW</p>`;
       } catch (err) {
         savedLine = `<p style="font-family:var(--font-mono);font-size:11.5px;color:var(--rust);margin-bottom:0;">${err.message.toUpperCase()}</p>`;
       }
