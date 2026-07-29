@@ -467,8 +467,8 @@
       <div>
         <form class="panel active" id="form-hitcher" onsubmit="submitHitcher(event)">
           <div class="row-2">
-            <div class="field"><label>From</label><input required placeholder="e.g. Wanaka" id="h-from"></div>
-            <div class="field"><label>To</label><input required placeholder="e.g. Queenstown" id="h-to"></div>
+            <div class="field"><label>From</label><input required placeholder="e.g. Wanaka" id="h-from" list="nz-towns"></div>
+            <div class="field"><label>To</label><input required placeholder="e.g. Queenstown" id="h-to" list="nz-towns"></div>
           </div>
           <div class="field"><label>When</label><input type="date" id="h-date"></div>
           <div class="field"><label>How you'd like to contribute</label>
@@ -485,8 +485,8 @@
 
         <form class="panel" id="form-driver" onsubmit="submitDriver(event)">
           <div class="row-2">
-            <div class="field"><label>From</label><input required placeholder="e.g. Christchurch" id="d-from"></div>
-            <div class="field"><label>To</label><input required placeholder="e.g. Dunedin" id="d-to"></div>
+            <div class="field"><label>From</label><input required placeholder="e.g. Christchurch" id="d-from" list="nz-towns"></div>
+            <div class="field"><label>To</label><input required placeholder="e.g. Dunedin" id="d-to" list="nz-towns"></div>
           </div>
           <div class="field"><label>When</label><input type="date" id="d-date"></div>
           <div class="field"><label>Seats available</label>
@@ -780,6 +780,10 @@
     if (parts.length !== 3) return d;
     return parts[2] + '/' + parts[1] + '/' + parts[0];
   }
+  function cap(s){
+    if (!s) return s;
+    return s.replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+  }
   const CONTRIB_MAP = {
     'Free, just good company': 'free',
     'Snacks only': 'snacks',
@@ -1014,7 +1018,7 @@
     }
     grid.innerHTML = filtered.map(r => `
       <div class="ride-card">
-        <div class="route">${r.from}<span class="arrow">→</span>${r.to}</div>
+        <div class="route">${cap(r.from)}<span class="arrow">→</span>${cap(r.to)}</div>
         <div class="when">${fmtDate(r.date) || 'Flexible'}</div>
         <div class="driver">
           <div class="avatar" style="width:26px;height:26px;font-size:11px;">${r.driverName.split(' ').map(n=>n[0]).join('')}</div>
@@ -1187,7 +1191,7 @@
       const ridesBookings = bookings.filter(b => b.ride_id === r.id);
       return `
         <div class="ride-card">
-          <div class="route">${r.from_loc}<span class="arrow">→</span>${r.to_loc}</div>
+          <div class="route">${cap(r.from_loc)}<span class="arrow">→</span>${cap(r.to_loc)}</div>
           <div class="when">${fmtDate(r.ride_date) || 'Flexible'} · ${r.seats_available}/${r.seats_total} seats left</div>
           ${ridesBookings.map(b => `
             <div class="match-row" style="margin-top:10px;">
@@ -1206,7 +1210,7 @@
     if (!bookings.length) { el.innerHTML = `<p style="color:var(--ink-soft);font-size:14px;">No bookings yet — browse rides above and request a seat.</p>`; return; }
     el.innerHTML = bookings.map(b => `
       <div class="ride-card">
-        <div class="route">${b.from_loc}<span class="arrow">→</span>${b.to_loc}</div>
+        <div class="route">${cap(b.from_loc)}<span class="arrow">→</span>${cap(b.to_loc)}</div>
         <div class="when">Driver: ${b.driver_name} · ${b.status}</div>
         ${b.status === 'completed' ? `<div id="rate-${b.id}" style="margin-top:12px;">
           <button class="btn btn-amber" style="width:100%;" onclick="openRating('${b.id}')">Rate this ride</button>
@@ -1240,5 +1244,6 @@
   checkAuth();
   loadRides();
 </script>
+<datalist id="nz-towns"><option value="Auckland"><option value="Hamilton"><option value="Tauranga"><option value="Rotorua"><option value="Taupo"><option value="Napier"><option value="Hastings"><option value="New Plymouth"><option value="Palmerston North"><option value="Whanganui"><option value="Wellington"><option value="Nelson"><option value="Blenheim"><option value="Kaikoura"><option value="Christchurch"><option value="Timaru"><option value="Oamaru"><option value="Dunedin"><option value="Invercargill"><option value="Queenstown"><option value="Wanaka"><option value="Te Anau"><option value="Franz Josef"><option value="Fox Glacier"><option value="Greymouth"><option value="Westport"><option value="Picton"><option value="Motueka"><option value="Takaka"><option value="Paihia"><option value="Kerikeri"><option value="Whangarei"><option value="Thames"><option value="Coromandel"><option value="Whitianga"><option value="Tairua"><option value="Ohakune"><option value="Turangi"><option value="Gisborne"><option value="Masterton"><option value="Levin"><option value="Feilding"><option value="Ashburton"><option value="Geraldine"><option value="Twizel"><option value="Cromwell"><option value="Alexandra"><option value="Gore"><option value="Bluff"><option value="Hokitika"><option value="Reefton"><option value="Murchison"><option value="Waipukurau"><option value="Dannevirke"><option value="Rangiora"><option value="Kaiapoi"><option value="Lincoln"><option value="Akaroa"><option value="Methven"><option value="Fairlie"><option value="Porirua"><option value="Lower Hutt"><option value="Upper Hutt"><option value="Kapiti"><option value="Otaki"><option value="Waiheke Island"><option value="Pukekohe"><option value="Matamata"><option value="Cambridge"><option value="Te Awamutu"><option value="Morrinsville"><option value="Putaruru"><option value="Tokoroa"><option value="Waihi"><option value="Katikati"></datalist>
 </body>
 </html>
