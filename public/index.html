@@ -470,7 +470,7 @@
             <div class="field"><label>From</label><input required placeholder="e.g. Wanaka" id="h-from" list="nz-towns"></div>
             <div class="field"><label>To</label><input required placeholder="e.g. Queenstown" id="h-to" list="nz-towns"></div>
           </div>
-          <div class="field"><label>When</label><input type="date" id="h-date"></div>
+          <div class="field" style="cursor:pointer;" onclick="document.getElementById('h-date').showPicker \&\& document.getElementById('h-date').showPicker()"><label>When</label><input type="date" id="h-date" style="cursor:pointer;"></div>
           <div class="field"><label>How you'd like to contribute</label>
             <div class="choice-grid">
               <label class="choice"><input type="radio" name="h-contrib" value="Free to join" checked>Free to join</label>
@@ -488,7 +488,7 @@
             <div class="field"><label>From</label><input required placeholder="e.g. Christchurch" id="d-from" list="nz-towns"></div>
             <div class="field"><label>To</label><input required placeholder="e.g. Dunedin" id="d-to" list="nz-towns"></div>
           </div>
-          <div class="field"><label>When</label><input type="date" id="d-date"></div>
+          <div class="field" style="cursor:pointer;" onclick="document.getElementById('d-date').showPicker \&\& document.getElementById('d-date').showPicker()"><label>When</label><input type="date" id="d-date" style="cursor:pointer;"></div>
           <div class="field"><label>Seats available</label>
             <div class="stepper">
               <button type="button" onclick="stepSeats(-1)">−</button>
