@@ -482,7 +482,7 @@
               <label class="choice"><input type="radio" name="h-contrib" value="Pay what's listed">Pay what's listed</label>
             </div>
           </div>
-          <div class="field"><label>Note to drivers (optional)</label><textarea rows="2" placeholder="One big backpack, flexible on timing..." id="h-note"></textarea></div>
+          <div class="field"><label id="h-note-label">Note to drivers (optional)</label><textarea rows="2" placeholder="One big backpack, flexible on timing..." id="h-note"></textarea></div>
           <div class="submit-row"><button type="submit" class="btn btn-amber">Post my route</button></div>
         </form>
 
@@ -946,6 +946,20 @@
   });
   document.querySelectorAll('input[name="h-contrib"], input[name="d-contrib"]').forEach(i=>{
     if(i.checked) i.closest('.choice').classList.add('checked');
+  });
+  function toggleHitcherNote(value){
+    const label = document.getElementById('h-note-label');
+    const note = document.getElementById('h-note');
+    if (value === 'Happy to chip in for petrol') {
+      label.textContent = 'Suggested contribution (optional)';
+      note.placeholder = 'e.g. ~$15 towards gas';
+    } else {
+      label.textContent = 'Note to drivers (optional)';
+      note.placeholder = 'One big backpack, flexible on timing...';
+    }
+  }
+  document.querySelectorAll('input[name="h-contrib"]').forEach(i=>{
+    i.addEventListener('change', ()=> toggleHitcherNote(i.value));
   });
 
   function toggleContribFields(value){
