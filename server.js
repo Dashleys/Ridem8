@@ -329,8 +329,8 @@ app.post('/rides/:id/book', requireAuth, async (req, res) => {
       `INSERT INTO bookings (id,ride_id,hitcher_id,status,price_cents,created_at) VALUES ($1,$2,$3,'pending',$4,$5)`,
       [bookingId, ride.id, req.userId, ride.price_cents, now()]
     );
-    const isSilver = driver.rides_completed >= 10;
-    const fee = isSilver ? 0 : Math.round(ride.price_cents * 0.08);
+    const isHero = driver.rides_completed >= 20;
+    const fee = isHero ? Math.round(ride.price_cents * 0.05) : Math.round(ride.price_cents * 0.08);
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [{ price_data: { currency: 'nzd', unit_amount: ride.price_cents,

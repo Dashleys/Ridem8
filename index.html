@@ -596,18 +596,16 @@
   <div class="wrap rewards-grid">
     <div class="passport">
       <div class="ptitle">Loyalty stamps</div>
-      <h3>7 of 10 rides this season</h3>
+      <h3>14 of 20 rides this season</h3>
       <div class="stamp-row" id="stamp-row"></div>
-      <div class="progress-text">3 more rides to unlock <b style="color:var(--paper);">Silver status</b> — fee-free listings and priority placement.</div>
+      <div class="progress-text">6 more rides to unlock <b style="color:var(--paper);">Hero status</b> — a reduced 5% platform fee instead of 8%.</div>
     </div>
     <div>
       <span class="eyebrow">Rewards</span>
       <h2 style="font-size:28px;margin-bottom:10px;">The more you give lifts, the less it costs you.</h2>
       <p style="color:var(--ink-soft);margin-bottom:26px;">Every completed, well-rated ride earns a stamp. Stamps stack into status — and status pays for itself.</p>
       <div class="tier-list">
-        <div class="tier-row"><div><b>Bronze</b><br><span>1–9 rides</span></div><span class="tier-badge bronze">Welcome perks</span></div>
-        <div class="tier-row"><div><b>Silver</b><br><span>10–29 rides</span></div><span class="tier-badge silver">Fee-free listings</span></div>
-        <div class="tier-row"><div><b>Gold</b><br><span>30+ rides</span></div><span class="tier-badge gold">Top placement + free annual plan</span></div>
+        <div class="tier-row"><div><b>Hero status</b><br><span>20+ rides</span></div><span class="tier-badge silver">5% fee instead of 8%</span></div>
       </div>
     </div>
   </div>
@@ -1202,18 +1200,18 @@
       subEl.innerHTML = '';
     }
 
-    const stamps = currentUser.ridesCompleted % 10 || (currentUser.ridesCompleted > 0 ? 10 : 0);
+    const stamps = currentUser.ridesCompleted % 20 || (currentUser.ridesCompleted > 0 ? 20 : 0);
     const row = document.getElementById('me-stamp-row');
     row.innerHTML = '';
-    for (let i = 1; i <= 10; i++) {
+    for (let i = 1; i <= 20; i++) {
       const d = document.createElement('div');
       d.className = 'stamp' + (i <= stamps ? ' done' : '');
       d.textContent = i <= stamps ? '✓' : i;
       row.appendChild(d);
     }
-    document.getElementById('me-stamp-text').textContent = stamps >= 10
-      ? 'Silver status unlocked — fee-free listings are live on your account.'
-      : `${10 - stamps} more completed ride${10-stamps===1?'':'s'} to unlock Silver status.`;
+    document.getElementById('me-stamp-text').textContent = stamps >= 20
+      ? 'Hero status unlocked — 5% platform fee (down from 8%) is now active on your account.'
+      : `${20 - stamps} more completed ride${20-stamps===1?'':'s'} to unlock Hero status.`;
 
     try {
       const { ridesOffered, bookingsAsDriver, bookingsAsHitcher, reviewsReceived, ratedBookingIds } = await api('/me/activity');
