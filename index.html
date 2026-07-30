@@ -1132,7 +1132,7 @@
     document.getElementById('me-name').textContent = currentUser.name;
     document.getElementById('me-rating').textContent = currentUser.ratingAvg ? currentUser.ratingAvg + '' : '—';
     document.getElementById('me-rating-sub').textContent = currentUser.ratingCount
-      ? `FROM ${currentUser.ratingCount} RATING${currentUser.ratingCount>1?'S':''} · ${currentUser.ridesCompleted} RIDES COMPLETED`
+      ? `FROM ${currentUser.ratingCount} RATING${currentUser.ratingCount>1?'S':''} · ${currentUser.ridesCompleted} RIDE${currentUser.ridesCompleted>1?'S':''} COMPLETED`
       : 'NO RATINGS YET';
 
     const connectStatusEl = document.getElementById('me-connect-status');
