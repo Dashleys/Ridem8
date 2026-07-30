@@ -1255,7 +1255,7 @@
         <div class="route">${cap(b.from_loc)}<span class="arrow">→</span>${cap(b.to_loc)}</div>
         <div class="when">Driver: ${b.driver_name} · ${b.status}</div>
         ${b.status === 'completed' ? `<div id="rate-${b.id}" style="margin-top:12px;">
-          <button class="btn btn-amber" style="width:100%;" onclick="openRating('${b.id}')">Rate this ride</button>
+          <button class="btn btn-amber" style="width:100%;" onclick="openRating('${b.id}')">Rate this driver</button>
         </div>` : ''}
       </div>
     `).join('');
