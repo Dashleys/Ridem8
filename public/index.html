@@ -1202,9 +1202,9 @@
       : `${10 - stamps} more completed ride${10-stamps===1?'':'s'} to unlock Silver status.`;
 
     try {
-      const { ridesOffered, bookingsAsDriver, bookingsAsHitcher, reviewsReceived } = await api('/me/activity');
-      renderMyRides(ridesOffered, bookingsAsDriver);
-      renderMyBookings(bookingsAsHitcher);
+      const { ridesOffered, bookingsAsDriver, bookingsAsHitcher, reviewsReceived, ratedBookingIds } = await api('/me/activity');
+      renderMyRides(ridesOffered, bookingsAsDriver, ratedBookingIds || []);
+      renderMyBookings(bookingsAsHitcher, ratedBookingIds || []);
       renderMyReviews(reviewsReceived || []);
     } catch (err) {
       console.error(err);
@@ -1238,7 +1238,7 @@
     }
   }
 
-  function renderMyRides(rides, bookings){
+  function renderMyRides(rides, bookings, ratedIds){
     const el = document.getElementById('my-rides-list');
     if (!rides.length) { el.innerHTML = `<p style="color:var(--ink-soft);font-size:14px;">You haven't offered a ride yet — try "I've got space" above.</p>`; return; }
     el.innerHTML = rides.map(r => {
@@ -1256,13 +1256,15 @@
                 : b.status === 'completed' ? `<span class="tag">Done</span>` : ''}
             </div>
             ${b.status === 'completed' ? `<div id="rate-${b.id}" style="margin-top:10px;">
-              <button class="btn btn-amber" style="width:100%;" onclick="openRating('${b.id}')">Rate this rider</button>
+              ${ratedIds.includes(b.id)
+                ? `<button class="btn btn-ghost" style="width:100%;" disabled>Rated</button>`
+                : `<button class="btn btn-amber" style="width:100%;" onclick="openRating('${b.id}')">Rate this rider</button>`}
             </div>` : ''}`).join('')}
         </div>`;
     }).join('');
   }
 
-  function renderMyBookings(bookings){
+  function renderMyBookings(bookings, ratedIds){
     const el = document.getElementById('my-bookings-list');
     if (!bookings.length) { el.innerHTML = `<p style="color:var(--ink-soft);font-size:14px;">No bookings yet — browse rides above and request a seat.</p>`; return; }
     el.innerHTML = bookings.map(b => `
@@ -1270,7 +1272,9 @@
         <div class="route">${cap(b.from_loc)}<span class="arrow">→</span>${cap(b.to_loc)}</div>
         <div class="when">Driver: ${b.driver_name} · ${b.status}</div>
         ${b.status === 'completed' ? `<div id="rate-${b.id}" style="margin-top:12px;">
-          <button class="btn btn-amber" style="width:100%;" onclick="openRating('${b.id}')">Rate this driver</button>
+          ${ratedIds.includes(b.id)
+            ? `<button class="btn btn-ghost" style="width:100%;" disabled>Rated</button>`
+            : `<button class="btn btn-amber" style="width:100%;" onclick="openRating('${b.id}')">Rate this driver</button>`}
         </div>` : ''}
       </div>
     `).join('');
