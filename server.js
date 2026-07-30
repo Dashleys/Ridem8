@@ -323,13 +323,14 @@ app.post('/rides/:id/book', requireAuth, async (req, res) => {
       await pool.query('UPDATE rides SET seats_available=seats_available-1 WHERE id=$1', [ride.id]);
       return res.json({ booking: { id: bookingId, status: 'confirmed' } });
     }
-    const { rows: driverRows } = await pool.query('SELECT stripe_account_id FROM users WHERE id=$1', [ride.driver_id]);
+    const { rows: driverRows } = await pool.query('SELECT stripe_account_id, rides_completed FROM users WHERE id=$1', [ride.driver_id]);
     const driver = driverRows[0];
     await pool.query(
       `INSERT INTO bookings (id,ride_id,hitcher_id,status,price_cents,created_at) VALUES ($1,$2,$3,'pending',$4,$5)`,
       [bookingId, ride.id, req.userId, ride.price_cents, now()]
     );
-    const fee = Math.round(ride.price_cents * 0.08);
+    const isSilver = driver.rides_completed >= 10;
+    const fee = isSilver ? 0 : Math.round(ride.price_cents * 0.08);
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [{ price_data: { currency: 'nzd', unit_amount: ride.price_cents,
