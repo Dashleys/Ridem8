@@ -1250,7 +1250,7 @@
           ${ridesBookings.map(b => `
             <div class="match-row" style="margin-top:10px;">
               <div class="avatar">${b.hitcher_name.split(' ').map(n=>n[0]).join('')}</div>
-              <div class="info"><b style="color:var(--amber-deep);">${b.hitcher_name}</b><span style="color:var(--amber-deep);">${b.status}</span></div>
+              <div class="info"><b style="color:var(--amber-deep);">${b.hitcher_name}</b><span style="color:var(--amber-deep);">${b.status==='completed'?'Ride given':b.status}</span></div>
               ${['confirmed','paid'].includes(b.status)
                 ? `<button class="btn btn-ghost" style="padding:8px 12px;font-size:12.5px;border-color:var(--amber);color:var(--amber-deep);font-weight:600;" onclick="completeBooking('${b.id}', this)">Mark complete</button>`
                 : b.status === 'completed' ? `<span class="tag">Done</span>` : ''}
