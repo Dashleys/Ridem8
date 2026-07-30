@@ -301,7 +301,7 @@
   }
   .passport .ptitle{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--amber);}
   .passport h3{font-size:22px;margin-top:8px;}
-  .stamp-row{display:flex;gap:9px;margin-top:22px;flex-wrap:wrap;}
+  .stamp-row{display:grid;grid-template-columns:repeat(10,1fr);gap:9px;margin-top:22px;}
   .stamp{
     width:38px;height:38px;border-radius:50%;border:2px dashed var(--line-dark);display:flex;align-items:center;
     justify-content:center;font-size:15px;color:var(--line-dark);
@@ -848,10 +848,8 @@
       document.getElementById('my-activity').style.display = 'block';
       document.getElementById('trust-safety').style.display = 'none';
       document.getElementById('rewards').style.display = 'none';
-      document.getElementById('pricing').style.display = 'none';
       document.getElementById('nav-trust-link').style.display = 'none';
       document.getElementById('nav-rewards-link').style.display = 'none';
-      document.getElementById('nav-pricing-link').style.display = 'none';
       loadMyActivity();
     } else {
       authArea.innerHTML = `
