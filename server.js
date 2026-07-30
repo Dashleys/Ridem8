@@ -312,6 +312,11 @@ app.post('/rides/:id/book', requireAuth, async (req, res) => {
     if (!ride||ride.status!=='active') return res.status(404).json({ error: 'Ride not available.' });
     if (ride.seats_available < 1) return res.status(400).json({ error: 'No seats left.' });
     if (ride.driver_id === req.userId) return res.status(400).json({ error: "You can't book your own ride." });
+    const { rows: existingRows } = await pool.query(
+      `SELECT id FROM bookings WHERE ride_id = $1 AND hitcher_id = $2 AND status != 'cancelled'`,
+      [ride.id, req.userId]
+    );
+    if (existingRows.length > 0) return res.status(400).json({ error: "You've already booked a seat on this ride." });
     const bookingId = crypto.randomUUID();
     if (ride.contribution_type !== 'price') {
       await pool.query(
