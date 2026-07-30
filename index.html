@@ -717,6 +717,10 @@
         <div id="my-bookings-list" style="display:flex;flex-direction:column;gap:12px;"></div>
       </div>
     </div>
+    <div style="margin-top:40px;">
+      <h3 style="font-size:18px;margin-bottom:14px;">Reviews about you</h3>
+      <div id="my-reviews-list" style="display:flex;flex-direction:column;gap:12px;"></div>
+    </div>
   </div>
 </section>
 
@@ -1183,12 +1187,27 @@
       : `${10 - stamps} more completed ride${10-stamps===1?'':'s'} to unlock Silver status.`;
 
     try {
-      const { ridesOffered, bookingsAsDriver, bookingsAsHitcher } = await api('/me/activity');
+      const { ridesOffered, bookingsAsDriver, bookingsAsHitcher, reviewsReceived } = await api('/me/activity');
       renderMyRides(ridesOffered, bookingsAsDriver);
       renderMyBookings(bookingsAsHitcher);
+      renderMyReviews(reviewsReceived || []);
     } catch (err) {
       console.error(err);
     }
+  }
+  function renderMyReviews(reviews){
+    const el = document.getElementById('my-reviews-list');
+    if (!reviews.length) { el.innerHTML = `<p style="color:var(--ink-soft);font-size:14px;">No reviews yet.</p>`; return; }
+    el.innerHTML = reviews.map(r => `
+      <div class="ride-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <b>${r.rater_name}</b>
+          <span style="color:var(--amber);font-family:var(--font-mono);">${'&#9733;'.repeat(r.stars)}${'&#9734;'.repeat(5-r.stars)}</span>
+        </div>
+        ${r.comment ? `<p style="margin-top:8px;color:var(--ink-soft);font-size:14px;">"${r.comment}"</p>` : ''}
+        <div style="font-family:var(--font-mono);font-size:11px;color:var(--ink-soft);margin-top:8px;">${fmtDate(r.created_at.split('T')[0])}</div>
+      </div>
+    `).join('');
   }
 
   async function connectStripe(btn){

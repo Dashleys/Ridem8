@@ -402,10 +402,15 @@ app.get('/me/activity', requireAuth, async (req, res) => {
       `SELECT b.*,r.from_loc,r.to_loc,u.name AS driver_name FROM bookings b JOIN rides r ON r.id=b.ride_id JOIN users u ON u.id=r.driver_id WHERE b.hitcher_id=$1 ORDER BY b.created_at DESC`,
       [req.userId]
     );
+    const reviewsReceived = await pool.query(
+      `SELECT rt.*,u.name AS rater_name FROM ratings rt JOIN users u ON u.id=rt.rater_id WHERE rt.ratee_id=$1 ORDER BY rt.created_at DESC`,
+      [req.userId]
+    );
     res.json({
       ridesOffered: ridesOffered.rows,
       bookingsAsDriver: bookingsAsDriver.rows,
       bookingsAsHitcher: bookingsAsHitcher.rows,
+      reviewsReceived: reviewsReceived.rows,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
