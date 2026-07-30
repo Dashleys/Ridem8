@@ -771,8 +771,18 @@
     </form>
   </div>
 </div>
-
-
+<div class="modal-bg" id="rating-modal-bg" onclick="closeRatingModal(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="closeRatingModal()">&times;</button>
+    <h3>Rate this ride</h3>
+    <p class="sub">Optional comment helps other members know what to expect.</p>
+    <div id="star-picker" style="display:flex;gap:8px;font-size:34px;margin:20px 0;cursor:pointer;"></div>
+    <div class="field"><label>Comment (optional)</label>
+      <textarea id="rating-comment" rows="3" placeholder="How did it go?" style="width:100%;font-family:var(--font-body);padding:10px;border:1px solid var(--line);border-radius:8px;resize:vertical;"></textarea>
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-top:14px;padding:13px;" onclick="submitRatingForm()">Submit rating</button>
+  </div>
+</div>
 <script>
   let currentUser = null;
   (function(){
@@ -1245,11 +1255,35 @@
     }
   }
 
+  let ratingBookingId = null;
+  let ratingStars = 5;
+  function renderStarPicker(){
+    const el = document.getElementById('star-picker');
+    el.innerHTML = [1,2,3,4,5].map(n => `<span onclick="setRatingStars(${n})" style="color:${n<=ratingStars?'var(--amber)':'var(--line)'};">&#9733;</span>`).join('');
+  }
+  function setRatingStars(n){
+    ratingStars = n;
+    renderStarPicker();
+  }
   function openRating(bookingId){
-    const stars = prompt('How many stars (1-5)?', '5');
-    if (!stars) return;
-    api(`/bookings/${bookingId}/rate`, { method: 'POST', body: { stars: Number(stars) } })
-      .then(() => { alert('Thanks for rating!'); loadMyActivity(); checkAuth(); })
+    ratingBookingId = bookingId;
+    ratingStars = 5;
+    document.getElementById('rating-comment').value = '';
+    renderStarPicker();
+    document.getElementById('rating-modal-bg').classList.add('open');
+  }
+  function closeRatingModal(event){
+    if (event && event.target !== event.currentTarget) return;
+    document.getElementById('rating-modal-bg').classList.remove('open');
+  }
+  function submitRatingForm(){
+    const comment = document.getElementById('rating-comment').value.trim();
+    api(`/bookings/${ratingBookingId}/rate`, { method: 'POST', body: { stars: ratingStars, comment: comment || undefined } })
+      .then(() => {
+        closeRatingModal();
+        loadMyActivity();
+        checkAuth();
+      })
       .catch(err => alert(err.message));
   }
 
