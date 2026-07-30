@@ -122,10 +122,7 @@ const BLOCKED_TERMS = [
 function containsBlockedContent(text) {
   if (!text) return false;
   const lower = text.toLowerCase();
-  return BLOCKED_TERMS.some(term => {
-    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp('\\b' + escaped + '\\b', 'i').test(lower);
-  });
+  return BLOCKED_TERMS.some(term => lower.includes(term));
 }
 
 // ── Express ────────────────────────────────────────────────────────────────
