@@ -845,6 +845,9 @@
         <button class="btn btn-ghost" onclick="logout()">Log out</button>`;
       activityLink.style.display = 'inline';
       document.getElementById('my-activity').style.display = 'block';
+      document.getElementById('trust-safety').style.display = 'none';
+      document.getElementById('rewards').style.display = 'none';
+      document.getElementById('pricing').style.display = 'none';
       loadMyActivity();
     } else {
       authArea.innerHTML = `
@@ -852,6 +855,9 @@
         <button class="btn btn-primary" onclick="openModal('signup')">Sign up free</button>`;
       activityLink.style.display = 'none';
       document.getElementById('my-activity').style.display = 'none';
+      document.getElementById('trust-safety').style.display = '';
+      document.getElementById('rewards').style.display = '';
+      document.getElementById('pricing').style.display = '';
     }
   }
 
