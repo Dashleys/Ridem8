@@ -409,9 +409,9 @@
     <nav class="nav-links">
       <a href="#try-it">How it works</a>
       <a href="#browse-rides">Browse rides</a>
-      <a href="#trust-safety">Trust &amp; safety</a>
-      <a href="#rewards">Rewards</a>
-      <a href="#pricing">Pricing</a>
+      <a href="#trust-safety" id="nav-trust-link">Trust &amp; safety</a>
+      <a href="#rewards" id="nav-rewards-link">Rewards</a>
+      <a href="#pricing" id="nav-pricing-link">Pricing</a>
       <a href="#my-activity" id="nav-activity-link" style="display:none;">My activity</a>
     </nav>
     <div id="nav-auth-area">
@@ -848,6 +848,9 @@
       document.getElementById('trust-safety').style.display = 'none';
       document.getElementById('rewards').style.display = 'none';
       document.getElementById('pricing').style.display = 'none';
+      document.getElementById('nav-trust-link').style.display = 'none';
+      document.getElementById('nav-rewards-link').style.display = 'none';
+      document.getElementById('nav-pricing-link').style.display = 'none';
       loadMyActivity();
     } else {
       authArea.innerHTML = `
@@ -858,6 +861,9 @@
       document.getElementById('trust-safety').style.display = '';
       document.getElementById('rewards').style.display = '';
       document.getElementById('pricing').style.display = '';
+      document.getElementById('nav-trust-link').style.display = '';
+      document.getElementById('nav-rewards-link').style.display = '';
+      document.getElementById('nav-pricing-link').style.display = '';
     }
   }
 
