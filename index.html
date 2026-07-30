@@ -1210,7 +1210,10 @@
               ${['confirmed','paid'].includes(b.status)
                 ? `<button class="btn btn-ghost" style="padding:8px 12px;font-size:12.5px;" onclick="completeBooking('${b.id}', this)">Mark complete</button>`
                 : b.status === 'completed' ? `<span class="tag">Done</span>` : ''}
-            </div>`).join('')}
+            </div>
+            ${b.status === 'completed' ? `<div id="rate-${b.id}" style="margin-top:10px;">
+              <button class="btn btn-amber" style="width:100%;" onclick="openRating('${b.id}')">Rate this rider</button>
+            </div>` : ''}`).join('')}
         </div>`;
     }).join('');
   }
