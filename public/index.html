@@ -1053,7 +1053,7 @@
     }
     grid.innerHTML = filtered.map(r => `
       <div class="ride-card">
-        ${r.isBoosted ? '<div class="tag" style="margin-bottom:8px;background:var(--sage);color:var(--paper);">Boosted</div>' : ''}
+        ${r.isBoosted ? '<div class="tag" style="margin-bottom:8px;background:var(--sage);color:var(--paper);display:inline-block;">Boosted</div>' : ''}
         <div class="route">${cap(r.from)}<span class="arrow">→</span>${cap(r.to)}</div>
         <div class="when">${fmtDate(r.date) || 'Flexible'}</div>
         <div class="driver">
