@@ -323,14 +323,18 @@ app.post('/rides/:id/book', requireAuth, async (req, res) => {
       await pool.query('UPDATE rides SET seats_available=seats_available-1 WHERE id=$1', [ride.id]);
       return res.json({ booking: { id: bookingId, status: 'confirmed' } });
     }
-    const { rows: driverRows } = await pool.query('SELECT stripe_account_id, rides_completed FROM users WHERE id=$1', [ride.driver_id]);
+    const { rows: driverRows } = await pool.query('SELECT stripe_account_id, rides_completed, subscription_status, subscription_tier FROM users WHERE id=$1', [ride.driver_id]);
     const driver = driverRows[0];
     await pool.query(
       `INSERT INTO bookings (id,ride_id,hitcher_id,status,price_cents,created_at) VALUES ($1,$2,$3,'pending',$4,$5)`,
       [bookingId, ride.id, req.userId, ride.price_cents, now()]
     );
-    const isHero = driver.rides_completed >= 20;
-    const fee = isHero ? Math.round(ride.price_cents * 0.05) : Math.round(ride.price_cents * 0.08);
+    const subActive = driver.subscription_status === 'active';
+    let feeRate = 0.10;
+    if (subActive && driver.subscription_tier === 'roadTripperAnnual') feeRate = 0.04;
+    else if (subActive && driver.subscription_tier === 'driverPlusMonthly') feeRate = 0.06;
+    else if (driver.rides_completed >= 20) feeRate = 0.08;
+    const fee = Math.round(ride.price_cents * feeRate);
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [{ price_data: { currency: 'nzd', unit_amount: ride.price_cents,

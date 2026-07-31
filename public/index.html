@@ -334,7 +334,7 @@
   }
   .billing-toggle .switch.on .knob{left:25px;}
   .billing-toggle .save{font-family:var(--font-mono);font-size:11.5px;background:var(--sage);color:var(--white);padding:3px 9px;border-radius:999px;}
-  .pricing-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+  .pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
   @media (max-width:1000px){.pricing-grid{grid-template-columns:repeat(2,1fr);}}
   @media (max-width:600px){.pricing-grid{grid-template-columns:1fr;}}
   .price-card{
@@ -598,14 +598,14 @@
       <div class="ptitle">Loyalty stamps</div>
       <h3>14 of 20 rides this season</h3>
       <div class="stamp-row" id="stamp-row"></div>
-      <div class="progress-text">6 more rides to unlock <b style="color:var(--paper);">Hero status</b> — a reduced 5% platform fee instead of 8%.</div>
+      <div class="progress-text">6 more rides to unlock <b style="color:var(--paper);">Hero status</b> - a reduced 8% platform fee instead of 10%.</div>
     </div>
     <div>
       <span class="eyebrow">Rewards</span>
       <h2 style="font-size:28px;margin-bottom:10px;">The more you give lifts, the less it costs you.</h2>
       <p style="color:var(--ink-soft);margin-bottom:26px;">Every completed, well-rated ride earns a stamp. Stamps stack into status — and status pays for itself.</p>
       <div class="tier-list">
-        <div class="tier-row"><div><b>Hero status</b><br><span>20+ rides</span></div><span class="tier-badge silver">5% fee instead of 8%</span></div>
+        <div class="tier-row"><div><b>Hero status</b><br><span>20+ rides</span></div><span class="tier-badge silver">8% fee instead of 10%</span></div>
       </div>
     </div>
   </div>
@@ -618,48 +618,35 @@
       <h2>Free to join. Pay for what you use.</h2>
       <p>Most members never pay a cent. The platform makes money from a small per-ride fee, optional memberships for frequent drivers, and a few extras — never from raising the price of a ride itself.</p>
     </div>
-    <div class="billing-toggle">
-      <div class="switch" id="billing-switch" onclick="toggleBilling()"><div class="knob"></div></div>
-      <span style="font-size:14px;">Bill annually</span>
-      <span class="save">Save ~20%</span>
-    </div>
     <div class="pricing-grid">
-      <div class="price-card">
-        <h4>Free</h4>
-        <div class="price">$0</div>
+      <div class="price-card highlight">
+        <h4>Free Driver</h4>
+        <div class="price">$0<small> to join</small></div>
         <ul>
           <li>Unlimited route posting</li>
           <li>Browse &amp; message all listings</li>
           <li>Full rating &amp; verification</li>
-          <li>Small fee only on priced rides</li>
-        </ul>
-        <button class="btn btn-ghost" onclick="openModal()">Get started</button>
-      </div>
-      <div class="price-card highlight">
-        <h4>Per ride</h4>
-        <div class="price">8%<small> of ride price</small></div>
-        <ul>
-          <li>Charged only when a price is set</li>
+          <li>10% fee, only on priced rides</li>
           <li>Nothing taken from free/snack/petrol rides</li>
-          <li>Covers payment handling &amp; support</li>
         </ul>
         <button class="btn btn-amber" onclick="openModal()">Get started</button>
       </div>
       <div class="price-card">
         <h4>Driver Plus</h4>
-        <div class="price" id="price-monthly">$6<small>/mo</small></div>
+        <div class="price">$15<small>/mo</small></div>
         <ul>
-          <li>Zero per-ride fees, ever</li>
+          <li>6% platform fee, down from 10%</li>
           <li>Boosted placement in search</li>
-          <li>Earnings &amp; mileage dashboard</li>
-          <li>Priority support</li>
+          <li>Priority bookings</li>
+          <li>Higher visibility on your listings</li>
         </ul>
-        <button class="btn btn-ghost" onclick="startCheckout('subscribe', annual ? 'driverPlusAnnual' : 'driverPlusMonthly', this)">Start plan</button>
+        <button class="btn btn-ghost" onclick="startCheckout('subscribe', 'driverPlusMonthly', this)">Start plan</button>
       </div>
       <div class="price-card">
         <h4>Road Tripper</h4>
-        <div class="price" id="price-annual">$60<small>/yr</small></div>
+        <div class="price">$200<small>/yr</small></div>
         <ul>
+          <li>4% platform fee - our best rate</li>
           <li>Everything in Driver Plus</li>
           <li>Free roadside-assist add-on</li>
           <li>Two ride insurance credits</li>
@@ -668,6 +655,7 @@
         <button class="btn btn-ghost" onclick="startCheckout('subscribe', 'roadTripperAnnual', this)">Start plan</button>
       </div>
     </div>
+    <p style="text-align:center;color:var(--ink-soft);font-size:13.5px;margin-top:20px;">Drive 20+ rides and earn Hero status for free - an 8% fee, no subscription required.</p>
 
     <div class="addons">
       <div class="addons-head">Optional extras, à la carte</div>
@@ -1128,14 +1116,6 @@
     stampRow.appendChild(d);
   }
 
-  // ---------- billing toggle ----------
-  let annual = false;
-  function toggleBilling(){
-    annual = !annual;
-    document.getElementById('billing-switch').classList.toggle('on', annual);
-    document.getElementById('price-monthly').innerHTML = annual ? '$58<small>/yr</small>' : '$6<small>/mo</small>';
-    document.getElementById('price-annual').innerHTML = annual ? '$60<small>/yr</small>' : '$6<small>/mo equiv.</small>';
-  }
 
   // ---------- modal ----------
   function openModal(mode){ setAuthMode(mode || 'signup'); document.getElementById('modal-bg').classList.add('open'); }
@@ -1187,8 +1167,7 @@
       connectActionEl.innerHTML = '';
     }
     const tierNames = {
-      driverPlusMonthly: 'Driver Plus (monthly)',
-      driverPlusAnnual: 'Driver Plus (annual)',
+      driverPlusMonthly: 'Driver Plus',
       roadTripperAnnual: 'Road Tripper',
     };
     const subEl = document.getElementById('me-subscription');
@@ -1208,7 +1187,7 @@
       row.appendChild(d);
     }
     document.getElementById('me-stamp-text').textContent = stamps >= 20
-      ? 'Hero status unlocked — 5% platform fee (down from 8%) is now active on your account.'
+      ? 'Hero status unlocked - 8% platform fee (down from 10%) is now active on your account.'
       : `${20 - stamps} more completed ride${20-stamps===1?'':'s'} to unlock Hero status.`;
 
     try {

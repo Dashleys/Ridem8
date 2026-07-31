@@ -46,9 +46,8 @@ function saveWebhookSecret(secret) {
 async function main() {
   console.log('Creating products & prices in Stripe...');
   const prices = {
-    driverPlusMonthly: await createPrice('Driver Plus (monthly)', 600, 'nzd', { interval: 'month' }),
-    driverPlusAnnual: await createPrice('Driver Plus (annual)', 5800, 'nzd', { interval: 'year' }),
-    roadTripperAnnual: await createPrice('Road Tripper (annual)', 6000, 'nzd', { interval: 'year' }),
+    driverPlusMonthly: await createPrice('Driver Plus (monthly)', 1500, 'nzd', { interval: 'month' }),
+    roadTripperAnnual: await createPrice('Road Tripper (annual)', 20000, 'nzd', { interval: 'year' }),
     boost: await createPrice('Listing boost (24h)', 200, 'nzd', null),
     insurance: await createPrice('Per-ride insurance', 300, 'nzd', null),
     verification: await createPrice('Instant verification', 400, 'nzd', null),
