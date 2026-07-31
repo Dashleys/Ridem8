@@ -620,7 +620,7 @@
       <p>Most members never pay a cent. The platform makes money from a small per-ride fee, optional memberships for frequent drivers, and a few extras — never from raising the price of a ride itself.</p>
     </div>
     <div class="pricing-grid">
-      <div class="price-card" onclick="selectPlan(this)">
+      <div class="price-card" data-plan="free" onclick="selectPlan(this)">
         <h4>Free Driver</h4>
         <div class="price">$0<small> to join</small></div>
         <ul>
@@ -655,7 +655,7 @@
         <button class="btn btn-ghost" onclick="startCheckout('subscribe', 'roadTripperAnnual', this)">Start plan</button>
       </div>
     </div>
-    <p style="text-align:center;color:var(--ink-soft);font-size:13.5px;margin-top:20px;">Drive 20+ rides and earn Hero status for free - an 8% fee, no subscription required.</p>
+    <p id="hero-status-note" style="text-align:center;color:var(--ink-soft);font-size:13.5px;margin-top:20px;display:none;">Drive 20+ rides and earn Hero status for free - an 8% fee, no subscription required.</p>
 
     <div class="addons">
       <div class="addons-head">Optional extras, à la carte</div>
@@ -1286,6 +1286,8 @@
   function selectPlan(el){
     document.querySelectorAll(".price-card").forEach(c => c.classList.remove("selected"));
     el.classList.add("selected");
+    const note = document.getElementById("hero-status-note");
+    if (note) note.style.display = el.dataset.plan === "free" ? "block" : "none";
   }
   async function boostRide(rideId, btn, duration){
     const original = btn.textContent;
