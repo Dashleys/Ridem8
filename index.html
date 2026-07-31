@@ -644,12 +644,11 @@
       </div>
       <div class="price-card">
         <h4>Road Tripper</h4>
-        <div class="price">$200<small>/yr</small></div>
+        <div class="price">$160<small>/yr</small></div>
         <ul>
           <li>4% platform fee - our best rate</li>
           <li>Everything in Driver Plus</li>
-          <li>Free roadside-assist add-on</li>
-          <li>Two ride insurance credits</li>
+          <li>2 free listing boosts per year</li>
           <li>Early access to new routes &amp; features</li>
         </ul>
         <button class="btn btn-ghost" onclick="startCheckout('subscribe', 'roadTripperAnnual', this)">Start plan</button>
@@ -661,8 +660,6 @@
       <div class="addons-head">Optional extras, à la carte</div>
       <div class="addons-grid">
         <div class="addon"><b>Listing boost</b><span>Top of search for 24 hours on a busy route</span><span class="addon-price">$2 one-off</span><button class="btn btn-ghost" style="margin-top:10px;width:100%;" onclick="startCheckout('addon', 'boost', this)">Add</button></div>
-        <div class="addon"><b>Per-ride insurance</b><span>Extra cover for a single long-distance trip</span><span class="addon-price">$3 one-off</span><button class="btn btn-ghost" style="margin-top:10px;width:100%;" onclick="startCheckout('addon', 'insurance', this)">Add</button></div>
-        <div class="addon"><b>Instant verification</b><span>Skip the queue, get your badge in minutes</span><span class="addon-price">$4 one-off</span><button class="btn btn-ghost" style="margin-top:10px;width:100%;" onclick="startCheckout('addon', 'verification', this)">Add</button></div>
       </div>
     </div>
   </div>
@@ -1055,6 +1052,7 @@
     }
     grid.innerHTML = filtered.map(r => `
       <div class="ride-card">
+        ${r.isBoosted ? '<div class="tag" style="margin-bottom:8px;">Boosted</div>' : ''}
         <div class="route">${cap(r.from)}<span class="arrow">→</span>${cap(r.to)}</div>
         <div class="when">${fmtDate(r.date) || 'Flexible'}</div>
         <div class="driver">
@@ -1236,6 +1234,9 @@
         <div class="ride-card">
           <div class="route">${cap(r.from_loc)}<span class="arrow">→</span>${cap(r.to_loc)}</div>
           <div class="when">${fmtDate(r.ride_date) || 'Flexible'} · ${r.seats_available}/${r.seats_total} seats left</div>
+          ${r.boosted_until && new Date(r.boosted_until) > new Date()
+            ? '<div class="tag" style="margin-top:8px;">Boosted</div>'
+            : '<button class="btn btn-ghost" style="margin-top:8px;padding:6px 10px;font-size:12px;" data-ride-id="' + r.id + '" onclick="boostRide(this.dataset.rideId, this)">Boost this ride</button>'}
           ${ridesBookings.map(b => `
             <div class="match-row" style="margin-top:10px;">
               <div class="avatar">${b.hitcher_name.split(' ').map(n=>n[0]).join('')}</div>
@@ -1279,6 +1280,22 @@
       alert(err.message);
       btn.disabled = false;
       btn.textContent = 'Mark complete';
+    }
+  }
+  async function boostRide(rideId, btn){
+    btn.textContent = 'Boosting…';
+    btn.disabled = true;
+    try {
+      const data = await api('/rides/' + rideId + '/boost', { method: 'POST' });
+      if (data.url) {
+        window.location = data.url;
+      } else {
+        loadMyActivity();
+      }
+    } catch (err) {
+      alert(err.message);
+      btn.disabled = false;
+      btn.textContent = 'Boost this ride';
     }
   }
 
