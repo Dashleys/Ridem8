@@ -339,8 +339,9 @@
   @media (max-width:600px){.pricing-grid{grid-template-columns:1fr;}}
   .price-card{
     background:var(--white);border:1.5px solid var(--line);border-radius:var(--radius-m);padding:26px 22px;
-    display:flex;flex-direction:column;
+    display:flex;flex-direction:column;cursor:pointer;
   }
+  .price-card.selected{border-color:var(--amber);box-shadow:0 0 0 2px var(--amber);}
   .price-card.highlight{border-color:var(--asphalt);box-shadow:0 16px 32px -20px rgba(36,31,25,0.45);position:relative;}
   .price-card.highlight::before{
     content:'Most popular';position:absolute;top:-12px;left:22px;background:var(--amber);color:var(--asphalt);
@@ -619,7 +620,7 @@
       <p>Most members never pay a cent. The platform makes money from a small per-ride fee, optional memberships for frequent drivers, and a few extras — never from raising the price of a ride itself.</p>
     </div>
     <div class="pricing-grid">
-      <div class="price-card highlight">
+      <div class="price-card highlight" onclick="selectPlan(this)">
         <h4>Free Driver</h4>
         <div class="price">$0<small> to join</small></div>
         <ul>
@@ -631,7 +632,7 @@
         </ul>
         <button class="btn btn-amber" onclick="openModal()">Get started</button>
       </div>
-      <div class="price-card">
+      <div class="price-card" onclick="selectPlan(this)">
         <h4>Driver Plus</h4>
         <div class="price">$15<small>/mo</small></div>
         <ul>
@@ -642,7 +643,7 @@
         </ul>
         <button class="btn btn-ghost" onclick="startCheckout('subscribe', 'driverPlusMonthly', this)">Start plan</button>
       </div>
-      <div class="price-card">
+      <div class="price-card" onclick="selectPlan(this)">
         <h4>Road Tripper</h4>
         <div class="price">$160<small>/yr</small></div>
         <ul>
@@ -1281,6 +1282,10 @@
       btn.disabled = false;
       btn.textContent = 'Mark complete';
     }
+  }
+  function selectPlan(el){
+    document.querySelectorAll(".price-card").forEach(c => c.classList.remove("selected"));
+    el.classList.add("selected");
   }
   async function boostRide(rideId, btn){
     btn.textContent = 'Boosting…';
