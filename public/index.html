@@ -76,6 +76,7 @@
     border:none;border-radius:999px;padding:11px 20px;font-weight:600;font-size:14.5px;
     transition:transform .15s, box-shadow .15s;
   }
+  .btn:disabled{opacity:0.5;cursor:not-allowed;background:var(--line);color:var(--ink-soft);transform:none;}
   .btn:hover{transform:translateY(-1px);}
   .btn:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, .chip:focus-visible{
     outline:2.5px solid var(--amber-deep); outline-offset:2px;
@@ -641,7 +642,7 @@
           <li>Priority bookings</li>
           <li>Higher visibility on your listings</li>
         </ul>
-        <button class="btn btn-ghost" onclick="startCheckout('subscribe', 'driverPlusMonthly', this)">Start plan</button>
+        <button id="btn-driverPlus" class="btn btn-ghost" onclick="startCheckout('subscribe', 'driverPlusMonthly', this)">Start plan</button>
       </div>
       <div class="price-card" onclick="selectPlan(this)">
         <h4>Road Tripper</h4>
@@ -652,7 +653,7 @@
           <li>2 free listing boosts per year</li>
           <li>Early access to new routes &amp; features</li>
         </ul>
-        <button class="btn btn-ghost" onclick="startCheckout('subscribe', 'roadTripperAnnual', this)">Start plan</button>
+        <button id="btn-roadTripper" class="btn btn-ghost" onclick="startCheckout('subscribe', 'roadTripperAnnual', this)">Start plan</button>
       </div>
     </div>
     <p id="hero-status-note" style="text-align:center;color:var(--ink-soft);font-size:13.5px;margin-top:20px;display:none;">Drive 20+ rides and earn Hero status for free - an 8% fee, no subscription required.</p>
@@ -821,6 +822,23 @@
       currentUser = null;
     }
     renderAuthState();
+    updateSubscriptionButtons();
+  }
+  function updateSubscriptionButtons(){
+    const dpBtn = document.getElementById('btn-driverPlus');
+    const rtBtn = document.getElementById('btn-roadTripper');
+    if (dpBtn) { dpBtn.disabled = false; dpBtn.textContent = 'Start plan'; }
+    if (rtBtn) { rtBtn.disabled = false; rtBtn.textContent = 'Start plan'; }
+    if (currentUser && currentUser.subscriptionStatus === 'active') {
+      if (currentUser.subscriptionTier === 'driverPlusMonthly' && dpBtn) {
+        dpBtn.disabled = true;
+        dpBtn.textContent = 'Active plan';
+      }
+      if (currentUser.subscriptionTier === 'roadTripperAnnual' && rtBtn) {
+        rtBtn.disabled = true;
+        rtBtn.textContent = 'Active plan';
+      }
+    }
   }
 
   function renderAuthState() {
