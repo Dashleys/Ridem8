@@ -141,7 +141,7 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
 
   try {
     if (event.type === 'checkout.session.completed') {
-      const { kind, bookingId, userId, priceKey, rideId } = event.data.object.metadata || {};
+      const { kind, bookingId, userId, priceKey, rideId, duration } = event.data.object.metadata || {};
       if (kind === 'ride_booking' && bookingId) {
         const { rows } = await pool.query('SELECT * FROM bookings WHERE id = $1', [bookingId]);
         const booking = rows[0];
@@ -159,8 +159,9 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
           await pool.query('UPDATE users SET boost_credits = boost_credits + 2 WHERE id = $1', [userId]);
         }
       }
-      if (kind === 'addon' && priceKey === 'boost' && rideId) {
-        const boostedUntil = new Date(Date.now() + 24*60*60*1000).toISOString();
+      if (kind === 'addon' && (priceKey === 'boost' || priceKey === 'boostWeek') && rideId) {
+        const ms = duration === '7d' ? 7*24*60*60*1000 : 24*60*60*1000;
+        const boostedUntil = new Date(Date.now() + ms).toISOString();
         await pool.query('UPDATE rides SET boosted_until = $1 WHERE id = $2', [boostedUntil, rideId]);
       }
     }
@@ -378,20 +379,24 @@ app.post('/rides/:id/boost', requireAuth, async (req, res) => {
     const ride = rideRows[0];
     if (!ride) return res.status(404).json({ error: 'Ride not found.' });
     if (ride.driver_id !== req.userId) return res.status(403).json({ error: 'Only the driver can boost this ride.' });
-    const { rows: userRows } = await pool.query('SELECT boost_credits FROM users WHERE id=$1', [req.userId]);
-    const user = userRows[0];
-    if (user.boost_credits > 0) {
-      const boostedUntil = new Date(Date.now() + 24*60*60*1000).toISOString();
-      await pool.query('UPDATE rides SET boosted_until=$1 WHERE id=$2', [boostedUntil, ride.id]);
-      await pool.query('UPDATE users SET boost_credits=boost_credits-1 WHERE id=$1', [req.userId]);
-      return res.json({ ok: true, usedCredit: true });
+    const duration = req.body.duration === '7d' ? '7d' : '24h';
+    if (duration === '24h') {
+      const { rows: userRows } = await pool.query('SELECT boost_credits FROM users WHERE id=$1', [req.userId]);
+      const user = userRows[0];
+      if (user.boost_credits > 0) {
+        const boostedUntil = new Date(Date.now() + 24*60*60*1000).toISOString();
+        await pool.query('UPDATE rides SET boosted_until=$1 WHERE id=$2', [boostedUntil, ride.id]);
+        await pool.query('UPDATE users SET boost_credits=boost_credits-1 WHERE id=$1', [req.userId]);
+        return res.json({ ok: true, usedCredit: true });
+      }
     }
     const prices = loadPrices();
-    const priceId = prices['boost'];
+    const priceKey = duration === '7d' ? 'boostWeek' : 'boost';
+    const priceId = prices[priceKey];
     if (!priceId) return res.status(400).json({ error: 'Run "npm run setup" first.' });
     const session = await stripe.checkout.sessions.create({
       mode: 'payment', line_items: [{ price: priceId, quantity: 1 }],
-      metadata: { kind: 'addon', priceKey: 'boost', rideId: ride.id },
+      metadata: { kind: 'addon', priceKey, rideId: ride.id, duration },
       success_url: `${APP_URL}/?boosted=1`, cancel_url: `${APP_URL}/?cancelled=1`,
     });
     res.json({ url: session.url });

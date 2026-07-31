@@ -49,6 +49,7 @@ async function main() {
     driverPlusMonthly: await createPrice('Driver Plus (monthly)', 1500, 'nzd', { interval: 'month' }),
     roadTripperAnnual: await createPrice('Road Tripper (annual)', 16000, 'nzd', { interval: 'year' }),
     boost: await createPrice('Listing boost (24h)', 200, 'nzd', null),
+    boostWeek: await createPrice('Listing boost (7 days)', 800, 'nzd', null),
   };
   fs.writeFileSync('./price-ids.json', JSON.stringify(prices, null, 2));
   console.log('Saved price-ids.json\n');

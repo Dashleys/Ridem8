@@ -1237,7 +1237,7 @@
           <div class="when">${fmtDate(r.ride_date) || 'Flexible'} · ${r.seats_available}/${r.seats_total} seats left</div>
           ${r.boosted_until && new Date(r.boosted_until) > new Date()
             ? '<div class="tag" style="margin-top:8px;">Boosted</div>'
-            : '<button class="btn btn-ghost" style="margin-top:8px;padding:6px 10px;font-size:12px;" data-ride-id="' + r.id + '" onclick="boostRide(this.dataset.rideId, this)">Boost this ride</button>'}
+            : '<div style="margin-top:8px;display:flex;gap:6px;"><button class="btn btn-ghost" style="padding:6px 10px;font-size:12px;" data-ride-id="' + r.id + '" data-duration="24h" onclick="boostRide(this.dataset.rideId, this, this.dataset.duration)">Boost 24h ($2)</button><button class="btn btn-ghost" style="padding:6px 10px;font-size:12px;" data-ride-id="' + r.id + '" data-duration="7d" onclick="boostRide(this.dataset.rideId, this, this.dataset.duration)">Boost 7 days ($8)</button></div>'}
           ${ridesBookings.map(b => `
             <div class="match-row" style="margin-top:10px;">
               <div class="avatar">${b.hitcher_name.split(' ').map(n=>n[0]).join('')}</div>
@@ -1287,11 +1287,12 @@
     document.querySelectorAll(".price-card").forEach(c => c.classList.remove("selected"));
     el.classList.add("selected");
   }
-  async function boostRide(rideId, btn){
+  async function boostRide(rideId, btn, duration){
+    const original = btn.textContent;
     btn.textContent = 'Boosting…';
     btn.disabled = true;
     try {
-      const data = await api('/rides/' + rideId + '/boost', { method: 'POST' });
+      const data = await api('/rides/' + rideId + '/boost', { method: 'POST', body: { duration: duration || '24h' } });
       if (data.url) {
         window.location = data.url;
       } else {
@@ -1300,7 +1301,7 @@
     } catch (err) {
       alert(err.message);
       btn.disabled = false;
-      btn.textContent = 'Boost this ride';
+      btn.textContent = original;
     }
   }
 
