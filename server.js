@@ -41,6 +41,7 @@ async function initDb() {
       rides_completed INTEGER NOT NULL DEFAULT 0,
       rating_sum INTEGER NOT NULL DEFAULT 0, rating_count INTEGER NOT NULL DEFAULT 0,
       subscription_tier TEXT, subscription_status TEXT NOT NULL DEFAULT 'none',
+      boost_credits INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     );
   `);
@@ -49,7 +50,7 @@ async function initDb() {
       id TEXT PRIMARY KEY, driver_id TEXT NOT NULL REFERENCES users(id),
       from_loc TEXT NOT NULL, to_loc TEXT NOT NULL, ride_date TEXT,
       seats_total INTEGER NOT NULL, seats_available INTEGER NOT NULL,
-      contribution_type TEXT NOT NULL, price_cents INTEGER, petrol_note TEXT,
+      contribution_type TEXT NOT NULL, price_cents INTEGER, petrol_note TEXT, boosted_until TEXT,
       status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL
     );
   `);
@@ -106,6 +107,7 @@ function publicProfile(u) {
     ratingCount: u.rating_count,
     subscriptionTier: u.subscription_tier,
     subscriptionStatus: u.subscription_status,
+    boostCredits: u.boost_credits,
   };
 }
 function loadPrices() {
@@ -139,7 +141,7 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
 
   try {
     if (event.type === 'checkout.session.completed') {
-      const { kind, bookingId, userId, priceKey } = event.data.object.metadata || {};
+      const { kind, bookingId, userId, priceKey, rideId } = event.data.object.metadata || {};
       if (kind === 'ride_booking' && bookingId) {
         const { rows } = await pool.query('SELECT * FROM bookings WHERE id = $1', [bookingId]);
         const booking = rows[0];
@@ -153,6 +155,13 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
           `UPDATE users SET subscription_tier = $1, subscription_status = 'active' WHERE id = $2`,
           [priceKey, userId]
         );
+        if (priceKey === 'roadTripperAnnual') {
+          await pool.query('UPDATE users SET boost_credits = boost_credits + 2 WHERE id = $1', [userId]);
+        }
+      }
+      if (kind === 'addon' && priceKey === 'boost' && rideId) {
+        const boostedUntil = new Date(Date.now() + 24*60*60*1000).toISOString();
+        await pool.query('UPDATE rides SET boosted_until = $1 WHERE id = $2', [boostedUntil, rideId]);
       }
     }
     if (event.type === 'account.updated') {
@@ -291,12 +300,12 @@ app.get('/route-requests', async (req, res) => {
 app.get('/rides', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT r.*,u.name AS driver_name,u.rating_sum,u.rating_count FROM rides r JOIN users u ON u.id=r.driver_id WHERE r.status='active' AND r.seats_available>0 ORDER BY r.created_at DESC LIMIT 50`
+      `SELECT r.*,u.name AS driver_name,u.rating_sum,u.rating_count FROM rides r JOIN users u ON u.id=r.driver_id WHERE r.status='active' AND r.seats_available>0 ORDER BY (r.boosted_until IS NOT NULL AND r.boosted_until::timestamptz > NOW()) DESC, r.created_at DESC LIMIT 50`
     );
     res.json({ rides: rows.map(r => ({
       id: r.id, from: r.from_loc, to: r.to_loc, date: r.ride_date,
       seatsAvailable: r.seats_available, contributionType: r.contribution_type,
-      priceCents: r.price_cents, petrolNote: r.petrol_note, driverName: r.driver_name,
+      priceCents: r.price_cents, petrolNote: r.petrol_note, isBoosted: !!(r.boosted_until && new Date(r.boosted_until) > new Date()), driverName: r.driver_name,
       driverRating: r.rating_count ? Math.round((r.rating_sum/r.rating_count)*10)/10 : null,
     })) });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -360,6 +369,32 @@ app.post('/bookings/:id/complete', requireAuth, async (req, res) => {
     await pool.query(`UPDATE bookings SET status='completed' WHERE id=$1`, [booking.id]);
     await pool.query('UPDATE users SET rides_completed=rides_completed+1 WHERE id IN ($1,$2)', [ride.driver_id, booking.hitcher_id]);
     res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/rides/:id/boost', requireAuth, async (req, res) => {
+  try {
+    const { rows: rideRows } = await pool.query('SELECT * FROM rides WHERE id=$1', [req.params.id]);
+    const ride = rideRows[0];
+    if (!ride) return res.status(404).json({ error: 'Ride not found.' });
+    if (ride.driver_id !== req.userId) return res.status(403).json({ error: 'Only the driver can boost this ride.' });
+    const { rows: userRows } = await pool.query('SELECT boost_credits FROM users WHERE id=$1', [req.userId]);
+    const user = userRows[0];
+    if (user.boost_credits > 0) {
+      const boostedUntil = new Date(Date.now() + 24*60*60*1000).toISOString();
+      await pool.query('UPDATE rides SET boosted_until=$1 WHERE id=$2', [boostedUntil, ride.id]);
+      await pool.query('UPDATE users SET boost_credits=boost_credits-1 WHERE id=$1', [req.userId]);
+      return res.json({ ok: true, usedCredit: true });
+    }
+    const prices = loadPrices();
+    const priceId = prices['boost'];
+    if (!priceId) return res.status(400).json({ error: 'Run "npm run setup" first.' });
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment', line_items: [{ price: priceId, quantity: 1 }],
+      metadata: { kind: 'addon', priceKey: 'boost', rideId: ride.id },
+      success_url: `${APP_URL}/?boosted=1`, cancel_url: `${APP_URL}/?cancelled=1`,
+    });
+    res.json({ url: session.url });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
