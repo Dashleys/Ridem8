@@ -1083,7 +1083,7 @@
           <span class="badge ${r.contributionType}">${typeLabel[r.contributionType]}${r.contributionType==='price' ? ' · $'+(r.priceCents/100).toFixed(0) : ''}${r.contributionType==='petrol' && r.petrolNote ? ' · '+r.petrolNote : ''}</span>
           <span class="seats-left">${r.seatsAvailable} seat${r.seatsAvailable>1?'s':''} left</span>
         </div>
-        ${currentUser && r.driverId === currentUser.id ? '<div class="tag" style="display:inline-block;background:var(--sage);color:var(--paper);margin-top:14px;">Your listing</div>' : (r.alreadyBooked ? '<div class="tag" style="display:inline-block;background:var(--sage);color:var(--paper);margin-top:14px;">Ride requested</div>' : '<button class="btn btn-amber" style="width:100%;margin-top:14px;" onclick="bookRide(\'' + r.id + '\', this)">Request seat</button>')}
+        ${currentUser && r.driverId === currentUser.id ? '<div class="tag" style="display:inline-block;background:var(--amber);color:var(--asphalt);margin-top:14px;">Your listing</div>' : (r.alreadyBooked ? '<div class="tag" style="display:inline-block;background:var(--sage);color:var(--paper);margin-top:14px;">Ride requested</div>' : '<button class="btn btn-amber" style="width:100%;margin-top:14px;" onclick="bookRide(\'' + r.id + '\', this)">Request seat</button>')}
       </div>
     `).join('');
   }
