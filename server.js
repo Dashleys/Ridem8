@@ -303,11 +303,20 @@ app.get('/rides', async (req, res) => {
     const { rows } = await pool.query(
       `SELECT r.*,u.name AS driver_name,u.rating_sum,u.rating_count FROM rides r JOIN users u ON u.id=r.driver_id WHERE r.status='active' AND r.seats_available>0 ORDER BY (r.boosted_until IS NOT NULL AND r.boosted_until::timestamptz > NOW()) DESC, r.created_at DESC LIMIT 50`
     );
+    let bookedRideIds = new Set();
+    if (req.userId) {
+      const { rows: myBookings } = await pool.query(
+        "SELECT ride_id FROM bookings WHERE hitcher_id = $1 AND status != 'cancelled'",
+        [req.userId]
+      );
+      bookedRideIds = new Set(myBookings.map(b => b.ride_id));
+    }
     res.json({ rides: rows.map(r => ({
       id: r.id, from: r.from_loc, to: r.to_loc, date: r.ride_date,
       seatsAvailable: r.seats_available, contributionType: r.contribution_type,
       priceCents: r.price_cents, petrolNote: r.petrol_note, isBoosted: !!(r.boosted_until && new Date(r.boosted_until) > new Date()), driverName: r.driver_name, driverId: r.driver_id,
       driverRating: r.rating_count ? Math.round((r.rating_sum/r.rating_count)*10)/10 : null,
+      alreadyBooked: bookedRideIds.has(r.id),
     })) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
