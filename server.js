@@ -306,7 +306,7 @@ app.get('/rides', async (req, res) => {
     res.json({ rides: rows.map(r => ({
       id: r.id, from: r.from_loc, to: r.to_loc, date: r.ride_date,
       seatsAvailable: r.seats_available, contributionType: r.contribution_type,
-      priceCents: r.price_cents, petrolNote: r.petrol_note, isBoosted: !!(r.boosted_until && new Date(r.boosted_until) > new Date()), driverName: r.driver_name,
+      priceCents: r.price_cents, petrolNote: r.petrol_note, isBoosted: !!(r.boosted_until && new Date(r.boosted_until) > new Date()), driverName: r.driver_name, driverId: r.driver_id,
       driverRating: r.rating_count ? Math.round((r.rating_sum/r.rating_count)*10)/10 : null,
     })) });
   } catch (err) { res.status(500).json({ error: err.message }); }
