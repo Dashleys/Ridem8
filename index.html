@@ -1224,7 +1224,7 @@
     }
     document.getElementById('me-stamp-text').textContent = stamps >= 20
       ? 'Hero status unlocked - 8% platform fee (down from 10%) is now active on your account.'
-      : `${20 - stamps} more completed ride${20-stamps===1?'':'s'} to unlock Hero status.`;
+      : `${20 - stamps} more completed ride${20-stamps===1?'':'s'} to unlock Hero status — an 8% platform fee instead of 10%.`;
 
     try {
       const { ridesOffered, bookingsAsDriver, bookingsAsHitcher, reviewsReceived, ratedBookingIds } = await api('/me/activity');
