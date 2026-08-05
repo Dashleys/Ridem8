@@ -550,6 +550,13 @@
       <h2>Travellers looking for a ride</h2>
       <p>See who needs a lift on your route — you might already be heading that way. Post a matching ride under "I've got space" above.</p>
     </div>
+    <div class="chips" id="request-chips">
+      <button class="chip active" data-filter="all">All</button>
+      <button class="chip" data-filter="free">Free</button>
+      <button class="chip" data-filter="snacks">Snacks</button>
+      <button class="chip" data-filter="petrol">Petrol split</button>
+      <button class="chip" data-filter="price">Will pay</button>
+    </div>
     <div class="ride-grid" id="requests-grid"><!-- populated by JS --></div>
   </div>
 </section>
@@ -1369,40 +1376,61 @@
       .catch(err => alert(err.message));
   }
 
+  let allRequests = [];
+  const REQUEST_CONTRIB_MAP = {
+    'Free to join': 'free',
+    "I'll bring snacks": 'snacks',
+    'Happy to chip in for petrol': 'petrol',
+    "Pay what's listed": 'price',
+  };
+  const requestContribLabels = {
+    free: 'Free to join',
+    snacks: 'Snacks',
+    petrol: 'Petrol split',
+    price: 'Will pay',
+  };
   async function loadRouteRequests(){
     const grid = document.getElementById('requests-grid');
     if (!grid) return;
     try {
       const { requests } = await api('/route-requests');
-      if (!requests.length) {
-        grid.innerHTML = '<p style="color:var(--ink-soft);font-size:14px;grid-column:1/-1;">No route requests yet — be the first! Use "I need a ride" above.</p>';
-        return;
-      }
-      const contribLabels = {
-        'Free to join': 'Free to join',
-        "I'll bring snacks": 'Snacks',
-        'Happy to chip in for petrol': 'Petrol split',
-        "Pay what's listed": 'Will pay',
-      };
-      grid.innerHTML = requests.map(r => {
-        const label = contribLabels[r.contribution_pref] || r.contribution_pref || '';
-        return '<div class="ride-card">' +
-          '<div class="route">' + cap(r.from_loc) + '<span class="arrow">→</span>' + cap(r.to_loc) + '</div>' +
-          '<div class="when">' + (fmtDate(r.request_date) || 'Flexible') + '</div>' +
-          '<div class="driver">' +
-          '<div class="avatar" style="width:26px;height:26px;font-size:11px;">' + r.hitcher_name.split(' ').map(function(n){return n[0];}).join('') + '</div>' +
-          '<span class="name">' + r.hitcher_name + '</span>' +
-          '</div>' +
-          (r.note ? '<p style="color:var(--ink-soft);font-size:13px;margin-top:10px;">' + r.note + '</p>' : '') +
-          '<div class="foot">' +
-          (label ? '<span class="badge">' + label + '</span>' : '<span></span>') +
-          '</div>' +
-        '</div>';
-      }).join('');
+      allRequests = requests;
+      renderRouteRequests(document.querySelector('#request-chips .chip.active')?.dataset.filter || 'all');
     } catch (err) {
       console.error(err);
     }
   }
+  function renderRouteRequests(filter){
+    const grid = document.getElementById('requests-grid');
+    if (!grid) return;
+    const filtered = allRequests.filter(r => filter === 'all' || REQUEST_CONTRIB_MAP[r.contribution_pref] === filter);
+    if (!filtered.length) {
+      grid.innerHTML = '<p style="color:var(--ink-soft);font-size:14px;grid-column:1/-1;">No route requests yet' + (filter!=='all' ? ' in this category' : '') + ' — be the first! Use "I need a ride" above.</p>';
+      return;
+    }
+    grid.innerHTML = filtered.map(r => {
+      const cat = REQUEST_CONTRIB_MAP[r.contribution_pref];
+      const label = requestContribLabels[cat] || r.contribution_pref || '';
+      return '<div class="ride-card">' +
+        '<div class="route">' + cap(r.from_loc) + '<span class="arrow">→</span>' + cap(r.to_loc) + '</div>' +
+        '<div class="when">' + (fmtDate(r.request_date) || 'Flexible') + '</div>' +
+        '<div class="driver">' +
+        '<div class="avatar" style="width:26px;height:26px;font-size:11px;">' + r.hitcher_name.split(' ').map(function(n){return n[0];}).join('') + '</div>' +
+        '<span class="name">' + r.hitcher_name + '</span>' +
+        '</div>' +
+        (r.note ? '<p style="color:var(--ink-soft);font-size:13px;margin-top:10px;">' + r.note + '</p>' : '') +
+        '<div class="foot">' +
+        (label ? '<span class="badge">' + label + '</span>' : '<span></span>') +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+  document.getElementById('request-chips').addEventListener('click', function(e){
+    if (!e.target.classList.contains('chip')) return;
+    document.querySelectorAll('#request-chips .chip').forEach(function(c){ c.classList.remove('active'); });
+    e.target.classList.add('active');
+    renderRouteRequests(e.target.dataset.filter);
+  });
   // ---------- boot ----------
   checkAuth();
   loadRides();
