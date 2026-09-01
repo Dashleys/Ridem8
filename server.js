@@ -23,6 +23,11 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const APP_URL = process.env.APP_URL;
 
+// ── Cost-sharing compliance ─────────────────────────────────────────────────
+// NZTA-gazetted per-km reimbursement cap for cost-sharing arrangements.
+// Update this via env var the moment TSL confirms a rate — no code change needed.
+const MAX_REIMBURSEMENT_PER_KM_CENTS = parseInt(process.env.MAX_REIMBURSEMENT_PER_KM_CENTS || '73', 10);
+
 // ── Database (Postgres) ─────────────────────────────────────────────────────
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -54,6 +59,11 @@ async function initDb() {
       status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL
     );
   `);
+  // price_cents on rides is the driver's reimbursement claim only (cost-share, capped by law).
+  // The facilitator fee is calculated and shown separately at booking time — never folded into price_cents.
+  await pool.query(`ALTER TABLE rides ADD COLUMN IF NOT EXISTS distance_km NUMERIC;`);
+  await pool.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS facilitator_fee_cents INTEGER;`);
+  await pool.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS reimbursement_cents INTEGER;`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS route_requests (
       id TEXT PRIMARY KEY, hitcher_id TEXT NOT NULL REFERENCES users(id),
@@ -248,7 +258,7 @@ app.post('/drivers/connect-account', requireAuth, async (req, res) => {
 
 app.post('/rides', requireAuth, async (req, res) => {
   try {
-    const { from, to, date, seats, contributionType, priceCents, petrolNote } = req.body;
+    const { from, to, date, seats, contributionType, priceCents, petrolNote, distanceKm } = req.body;
     if (!from||!to||!seats||!contributionType)
       return res.status(400).json({ error: 'From, to, seats and contribution type are required.' });
     if (date && date < new Date().toISOString().split('T')[0])
@@ -261,11 +271,18 @@ app.post('/rides', requireAuth, async (req, res) => {
         return res.status(400).json({ error: 'Connect with Stripe before listing a priced ride.' });
       if (!priceCents || priceCents < 1)
         return res.status(400).json({ error: 'Set a price greater than zero.' });
+      // Reimbursement (what the driver claims for fuel/vehicle cost) must stay under the
+      // gazetted per-km cap so the ride qualifies as cost-sharing rather than a commercial fare.
+      if (distanceKm && priceCents > Math.round(distanceKm * MAX_REIMBURSEMENT_PER_KM_CENTS)) {
+        return res.status(400).json({
+          error: `Reimbursement can't exceed $${(MAX_REIMBURSEMENT_PER_KM_CENTS/100).toFixed(2)}/km. For ${distanceKm}km, the max is $${(Math.round(distanceKm * MAX_REIMBURSEMENT_PER_KM_CENTS)/100).toFixed(2)}.`
+        });
+      }
     }
     const id = crypto.randomUUID();
     await pool.query(
-      `INSERT INTO rides (id,driver_id,from_loc,to_loc,ride_date,seats_total,seats_available,contribution_type,price_cents,petrol_note,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-      [id, req.userId, from.trim(), to.trim(), date||null, seats, seats, contributionType, priceCents||null, petrolNote||null, now()]
+      `INSERT INTO rides (id,driver_id,from_loc,to_loc,ride_date,seats_total,seats_available,contribution_type,price_cents,petrol_note,created_at,distance_km) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [id, req.userId, from.trim(), to.trim(), date||null, seats, seats, contributionType, priceCents||null, petrolNote||null, now(), distanceKm||null]
     );
     const { rows } = await pool.query('SELECT * FROM rides WHERE id = $1', [id]);
     res.json({ ride: rows[0] });
@@ -314,7 +331,7 @@ app.get('/rides', async (req, res) => {
     res.json({ rides: rows.map(r => ({
       id: r.id, from: r.from_loc, to: r.to_loc, date: r.ride_date,
       seatsAvailable: r.seats_available, contributionType: r.contribution_type,
-      priceCents: r.price_cents, petrolNote: r.petrol_note, isBoosted: !!(r.boosted_until && new Date(r.boosted_until) > new Date()), driverName: r.driver_name, driverId: r.driver_id,
+      priceCents: r.price_cents, distanceKm: r.distance_km, petrolNote: r.petrol_note, isBoosted: !!(r.boosted_until && new Date(r.boosted_until) > new Date()), driverName: r.driver_name, driverId: r.driver_id,
       driverRating: r.rating_count ? Math.round((r.rating_sum/r.rating_count)*10)/10 : null,
       alreadyBooked: bookedRideIds.has(r.id),
     })) });
@@ -353,11 +370,20 @@ app.post('/rides/:id/book', requireAuth, async (req, res) => {
     if (subActive && driver.subscription_tier === 'roadTripperAnnual') feeRate = 0.04;
     else if (subActive && driver.subscription_tier === 'driverPlusMonthly') feeRate = 0.06;
     else if (driver.rides_completed >= 20) feeRate = 0.08;
-    const fee = Math.round(ride.price_cents * feeRate);
+    // ride.price_cents is the driver's cost-share reimbursement only. The facilitator
+    // fee is charged ON TOP as its own line item — never deducted from the driver's
+    // reimbursement — so the driver receives ride.price_cents in full via Stripe Connect.
+    const reimbursementCents = ride.price_cents;
+    const fee = Math.round(reimbursementCents * feeRate);
+    await pool.query('UPDATE bookings SET reimbursement_cents=$1, facilitator_fee_cents=$2 WHERE id=$3', [reimbursementCents, fee, bookingId]);
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      line_items: [{ price_data: { currency: 'nzd', unit_amount: ride.price_cents,
-        product_data: { name: `${ride.from_loc} → ${ride.to_loc}` } }, quantity: 1 }],
+      line_items: [
+        { price_data: { currency: 'nzd', unit_amount: reimbursementCents,
+          product_data: { name: `Cost-share reimbursement: ${ride.from_loc} → ${ride.to_loc}` } }, quantity: 1 },
+        { price_data: { currency: 'nzd', unit_amount: fee,
+          product_data: { name: 'ridem8 booking fee' } }, quantity: 1 },
+      ],
       payment_intent_data: { application_fee_amount: fee,
         transfer_data: { destination: driver.stripe_account_id } },
       metadata: { kind: 'ride_booking', bookingId },
@@ -499,6 +525,10 @@ app.post('/addons/checkout', async (req, res) => {
     });
     res.json({ url: session.url });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/config', (req, res) => {
+  res.json({ maxReimbursementPerKmCents: MAX_REIMBURSEMENT_PER_KM_CENTS });
 });
 
 app.get('/prices', (req, res) => {
