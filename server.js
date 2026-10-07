@@ -62,7 +62,6 @@ async function initDb() {
   // price_cents on rides is the driver's reimbursement claim only (cost-share, capped by law).
   // The facilitator fee is calculated and shown separately at booking time — never folded into price_cents.
   await pool.query(`ALTER TABLE rides ADD COLUMN IF NOT EXISTS distance_km NUMERIC;`);
-  await pool.query(`ALTER TABLE rides ADD COLUMN IF NOT EXISTS ride_time TEXT;`);
   await pool.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS facilitator_fee_cents INTEGER;`);
   await pool.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS reimbursement_cents INTEGER;`);
   await pool.query(`
@@ -90,6 +89,33 @@ async function initDb() {
       condition INTEGER, safety INTEGER, comment TEXT, created_at TEXT NOT NULL,
       UNIQUE(booking_id, rater_id)
     );
+  `);
+  // ── Recurring routes ("regulars") ──────────────────────────────────────────
+  // A driver posts a standing route (e.g. Wanaka→Cromwell, Tue/Thu, 8am) once.
+  // generateRecurringRideInstances() then creates the actual bookable `rides`
+  // rows ahead of time, and auto-seats anyone the driver has already approved.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS recurring_routes (
+      id TEXT PRIMARY KEY, driver_id TEXT NOT NULL REFERENCES users(id),
+      from_loc TEXT NOT NULL, to_loc TEXT NOT NULL,
+      days_of_week INTEGER[] NOT NULL, departure_time TEXT NOT NULL,
+      seats_total INTEGER NOT NULL, contribution_type TEXT NOT NULL,
+      price_cents INTEGER, distance_km NUMERIC, petrol_note TEXT,
+      active BOOLEAN NOT NULL DEFAULT true, created_at TEXT NOT NULL
+    );
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS recurring_route_subscribers (
+      id TEXT PRIMARY KEY, route_id TEXT NOT NULL REFERENCES recurring_routes(id),
+      hitcher_id TEXT NOT NULL REFERENCES users(id),
+      status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL,
+      UNIQUE(route_id, hitcher_id)
+    );
+  `);
+  await pool.query(`ALTER TABLE rides ADD COLUMN IF NOT EXISTS recurring_route_id TEXT REFERENCES recurring_routes(id);`);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_rides_recurring_unique
+    ON rides (recurring_route_id, ride_date) WHERE recurring_route_id IS NOT NULL;
   `);
 }
 
@@ -259,23 +285,11 @@ app.post('/drivers/connect-account', requireAuth, async (req, res) => {
 
 app.post('/rides', requireAuth, async (req, res) => {
   try {
-    const { from, to, date, time, seats, contributionType, priceCents, petrolNote, distanceKm } = req.body;
+    const { from, to, date, seats, contributionType, priceCents, petrolNote, distanceKm } = req.body;
     if (!from||!to||!seats||!contributionType)
       return res.status(400).json({ error: 'From, to, seats and contribution type are required.' });
-    const todayStr = new Date().toISOString().split('T')[0];
-    if (date && date < todayStr)
+    if (date && date < new Date().toISOString().split('T')[0])
       return res.status(400).json({ error: 'Please choose a date from today onwards.' });
-    // A same-day listing needs a real departure time that's still ahead of us —
-    // otherwise it's posted too late for anyone to realistically see and book it.
-    if (date === todayStr) {
-      if (!time)
-        return res.status(400).json({ error: "Add a departure time for a same-day ride." });
-      const departure = new Date(`${date}T${time}:00`);
-      const minLeadMs = 30 * 60 * 1000; // 30 minutes
-      if (isNaN(departure.getTime()) || departure.getTime() < Date.now() + minLeadMs) {
-        return res.status(400).json({ error: 'Same-day rides need a departure time at least 30 minutes from now.' });
-      }
-    }
     if (containsBlockedContent(petrolNote)) return res.status(400).json({ error: 'Please remove inappropriate language from your note.' });
     if (contributionType === 'price') {
       const { rows } = await pool.query('SELECT charges_enabled FROM users WHERE id = $1', [req.userId]);
@@ -294,8 +308,8 @@ app.post('/rides', requireAuth, async (req, res) => {
     }
     const id = crypto.randomUUID();
     await pool.query(
-      `INSERT INTO rides (id,driver_id,from_loc,to_loc,ride_date,ride_time,seats_total,seats_available,contribution_type,price_cents,petrol_note,created_at,distance_km) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-      [id, req.userId, from.trim(), to.trim(), date||null, time||null, seats, seats, contributionType, priceCents||null, petrolNote||null, now(), distanceKm||null]
+      `INSERT INTO rides (id,driver_id,from_loc,to_loc,ride_date,seats_total,seats_available,contribution_type,price_cents,petrol_note,created_at,distance_km) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [id, req.userId, from.trim(), to.trim(), date||null, seats, seats, contributionType, priceCents||null, petrolNote||null, now(), distanceKm||null]
     );
     const { rows } = await pool.query('SELECT * FROM rides WHERE id = $1', [id]);
     res.json({ ride: rows[0] });
@@ -342,9 +356,9 @@ app.get('/rides', async (req, res) => {
       bookedRideIds = new Set(myBookings.map(b => b.ride_id));
     }
     res.json({ rides: rows.map(r => ({
-      id: r.id, from: r.from_loc, to: r.to_loc, date: r.ride_date, time: r.ride_time,
+      id: r.id, from: r.from_loc, to: r.to_loc, date: r.ride_date,
       seatsAvailable: r.seats_available, contributionType: r.contribution_type,
-      priceCents: r.price_cents, distanceKm: r.distance_km, petrolNote: r.petrol_note, isBoosted: !!(r.boosted_until && new Date(r.boosted_until) > new Date()), driverName: r.driver_name, driverId: r.driver_id,
+      priceCents: r.price_cents, distanceKm: r.distance_km, petrolNote: r.petrol_note, isBoosted: !!(r.boosted_until && new Date(r.boosted_until) > new Date()), isRegular: !!r.recurring_route_id, driverName: r.driver_name, driverId: r.driver_id,
       driverRating: r.rating_count ? Math.round((r.rating_sum/r.rating_count)*10)/10 : null,
       alreadyBooked: bookedRideIds.has(r.id),
     })) });
@@ -420,6 +434,227 @@ app.post('/bookings/:id/complete', requireAuth, async (req, res) => {
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// Shared with /rides/:id/book and /bookings/:id/pay (used by recurring-route
+// auto-seating, where the booking row already exists before payment happens).
+async function createReimbursementCheckoutSession(booking, ride, driver) {
+  const subActive = driver.subscription_status === 'active';
+  let feeRate = 0.10;
+  if (subActive && driver.subscription_tier === 'roadTripperAnnual') feeRate = 0.04;
+  else if (subActive && driver.subscription_tier === 'driverPlusMonthly') feeRate = 0.06;
+  else if (driver.rides_completed >= 20) feeRate = 0.08;
+  const reimbursementCents = ride.price_cents;
+  const fee = Math.round(reimbursementCents * feeRate);
+  await pool.query('UPDATE bookings SET reimbursement_cents=$1, facilitator_fee_cents=$2 WHERE id=$3', [reimbursementCents, fee, booking.id]);
+  const session = await stripe.checkout.sessions.create({
+    mode: 'payment',
+    line_items: [
+      { price_data: { currency: 'nzd', unit_amount: reimbursementCents,
+        product_data: { name: `Cost-share reimbursement: ${ride.from_loc} → ${ride.to_loc}` } }, quantity: 1 },
+      { price_data: { currency: 'nzd', unit_amount: fee,
+        product_data: { name: 'ridem8 booking fee' } }, quantity: 1 },
+    ],
+    payment_intent_data: { application_fee_amount: fee,
+      transfer_data: { destination: driver.stripe_account_id } },
+    metadata: { kind: 'ride_booking', bookingId: booking.id },
+    success_url: `${APP_URL}/?booked=1`, cancel_url: `${APP_URL}/?booked=0`,
+  });
+  await pool.query('UPDATE bookings SET stripe_session_id=$1 WHERE id=$2', [session.id, booking.id]);
+  return session;
+}
+
+// Completes payment on a booking that already exists in 'pending' status —
+// this is how a hitcher pays for a seat that was auto-reserved on a regular
+// route (see generateRecurringRideInstances). Priced one-off bookings still
+// go through /rides/:id/book, which creates+pays in a single step.
+app.post('/bookings/:id/pay', requireAuth, async (req, res) => {
+  try {
+    const { rows: bookingRows } = await pool.query('SELECT * FROM bookings WHERE id=$1 AND hitcher_id=$2', [req.params.id, req.userId]);
+    const booking = bookingRows[0];
+    if (!booking) return res.status(404).json({ error: 'Booking not found.' });
+    if (booking.status !== 'pending') return res.status(400).json({ error: 'This booking is not awaiting payment.' });
+    const { rows: rideRows } = await pool.query('SELECT * FROM rides WHERE id=$1', [booking.ride_id]);
+    const ride = rideRows[0];
+    const { rows: driverRows } = await pool.query('SELECT stripe_account_id, rides_completed, subscription_status, subscription_tier FROM users WHERE id=$1', [ride.driver_id]);
+    const driver = driverRows[0];
+    const session = await createReimbursementCheckoutSession(booking, ride, driver);
+    res.json({ url: session.url });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Recurring routes ("regulars") ────────────────────────────────────────────
+function validDaysOfWeek(arr) {
+  return Array.isArray(arr) && arr.length > 0 && arr.every(d => Number.isInteger(d) && d >= 0 && d <= 6);
+}
+
+app.post('/recurring-routes', requireAuth, async (req, res) => {
+  try {
+    const { from, to, daysOfWeek, departureTime, seats, contributionType, priceCents, petrolNote, distanceKm } = req.body;
+    if (!from||!to||!seats||!contributionType||!departureTime)
+      return res.status(400).json({ error: 'From, to, seats, departure time and contribution type are required.' });
+    if (!validDaysOfWeek(daysOfWeek))
+      return res.status(400).json({ error: 'Pick at least one valid day of the week.' });
+    if (containsBlockedContent(petrolNote)) return res.status(400).json({ error: 'Please remove inappropriate language from your note.' });
+    if (contributionType === 'price') {
+      const { rows } = await pool.query('SELECT charges_enabled FROM users WHERE id = $1', [req.userId]);
+      if (!rows[0]?.charges_enabled)
+        return res.status(400).json({ error: 'Connect with Stripe before listing a priced route.' });
+      if (!priceCents || priceCents < 1)
+        return res.status(400).json({ error: 'Set a price greater than zero.' });
+      if (distanceKm && priceCents > Math.round(distanceKm * MAX_REIMBURSEMENT_PER_KM_CENTS)) {
+        return res.status(400).json({
+          error: `Reimbursement can't exceed $${(MAX_REIMBURSEMENT_PER_KM_CENTS/100).toFixed(2)}/km. For ${distanceKm}km, the max is $${(Math.round(distanceKm * MAX_REIMBURSEMENT_PER_KM_CENTS)/100).toFixed(2)}.`
+        });
+      }
+    }
+    const id = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO recurring_routes (id,driver_id,from_loc,to_loc,days_of_week,departure_time,seats_total,contribution_type,price_cents,distance_km,petrol_note,created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [id, req.userId, from.trim(), to.trim(), daysOfWeek, departureTime, seats, contributionType, priceCents||null, distanceKm||null, petrolNote||null, now()]
+    );
+    const { rows } = await pool.query('SELECT * FROM recurring_routes WHERE id=$1', [id]);
+    await generateRecurringRideInstances(); // create the next occurrences immediately, not on the next hourly tick
+    res.json({ route: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/recurring-routes', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT rr.*, u.name AS driver_name, u.rating_sum, u.rating_count
+       FROM recurring_routes rr JOIN users u ON u.id=rr.driver_id
+       WHERE rr.active=true ORDER BY rr.created_at DESC LIMIT 50`
+    );
+    res.json({ routes: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/recurring-routes/mine', requireAuth, async (req, res) => {
+  try {
+    const { rows: routes } = await pool.query(
+      `SELECT * FROM recurring_routes WHERE driver_id=$1 ORDER BY created_at DESC`, [req.userId]
+    );
+    const { rows: subscribers } = await pool.query(
+      `SELECT s.*, u.name AS hitcher_name, r.from_loc, r.to_loc
+       FROM recurring_route_subscribers s
+       JOIN recurring_routes r ON r.id=s.route_id
+       JOIN users u ON u.id=s.hitcher_id
+       WHERE r.driver_id=$1 ORDER BY s.created_at DESC`, [req.userId]
+    );
+    res.json({ routes, subscribers });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/me/recurring-subscriptions', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT s.*, r.from_loc, r.to_loc, r.days_of_week, r.departure_time, u.name AS driver_name
+       FROM recurring_route_subscribers s
+       JOIN recurring_routes r ON r.id=s.route_id
+       JOIN users u ON u.id=r.driver_id
+       WHERE s.hitcher_id=$1 ORDER BY s.created_at DESC`, [req.userId]
+    );
+    res.json({ subscriptions: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/recurring-routes/:id/join', requireAuth, async (req, res) => {
+  try {
+    const { rows: routeRows } = await pool.query('SELECT * FROM recurring_routes WHERE id=$1 AND active=true', [req.params.id]);
+    const route = routeRows[0];
+    if (!route) return res.status(404).json({ error: 'Route not found.' });
+    if (route.driver_id === req.userId) return res.status(400).json({ error: "You can't join your own route." });
+    const id = crypto.randomUUID();
+    try {
+      await pool.query(
+        `INSERT INTO recurring_route_subscribers (id,route_id,hitcher_id,status,created_at) VALUES ($1,$2,$3,'pending',$4)`,
+        [id, route.id, req.userId, now()]
+      );
+    } catch (err) {
+      if (err.code === '23505') return res.status(409).json({ error: "You've already requested to join this route." });
+      throw err;
+    }
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/recurring-routes/:routeId/subscribers/:subId/:action', requireAuth, async (req, res) => {
+  try {
+    const { routeId, subId, action } = req.params;
+    if (!['approve','decline'].includes(action)) return res.status(400).json({ error: 'Invalid action.' });
+    const { rows: routeRows } = await pool.query('SELECT * FROM recurring_routes WHERE id=$1', [routeId]);
+    const route = routeRows[0];
+    if (!route || route.driver_id !== req.userId) return res.status(403).json({ error: 'Only the route owner can do this.' });
+    const status = action === 'approve' ? 'approved' : 'declined';
+    await pool.query('UPDATE recurring_route_subscribers SET status=$1 WHERE id=$2 AND route_id=$3', [status, subId, routeId]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/recurring-routes/:id', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM recurring_routes WHERE id=$1', [req.params.id]);
+    const route = rows[0];
+    if (!route || route.driver_id !== req.userId) return res.status(403).json({ error: 'Only the route owner can do this.' });
+    await pool.query('UPDATE recurring_routes SET active=false WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Turns each active recurring route into concrete, bookable `rides` rows for
+// the next RECURRING_GENERATION_WINDOW_DAYS days (skipping dates that already
+// have an instance), then auto-seats anyone the driver has already approved —
+// first-approved-first-seated, up to the route's seat count. For free/petrol
+// routes the seat is confirmed immediately; for priced routes the booking is
+// created 'pending' and the hitcher completes payment via /bookings/:id/pay.
+const RECURRING_GENERATION_WINDOW_DAYS = 10;
+async function generateRecurringRideInstances() {
+  const { rows: routes } = await pool.query('SELECT * FROM recurring_routes WHERE active=true');
+  for (const route of routes) {
+    for (let offset = 0; offset < RECURRING_GENERATION_WINDOW_DAYS; offset++) {
+      const d = new Date();
+      d.setDate(d.getDate() + offset);
+      if (!route.days_of_week.includes(d.getDay())) continue;
+      const dateStr = d.toISOString().split('T')[0];
+      const { rows: existing } = await pool.query(
+        'SELECT id FROM rides WHERE recurring_route_id=$1 AND ride_date=$2', [route.id, dateStr]
+      );
+      if (existing.length > 0) continue;
+      const rideId = crypto.randomUUID();
+      await pool.query(
+        `INSERT INTO rides (id,driver_id,from_loc,to_loc,ride_date,seats_total,seats_available,contribution_type,price_cents,petrol_note,created_at,distance_km,recurring_route_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        [rideId, route.driver_id, route.from_loc, route.to_loc, dateStr, route.seats_total, route.seats_total,
+         route.contribution_type, route.price_cents, route.petrol_note, now(), route.distance_km, route.id]
+      );
+      const { rows: approved } = await pool.query(
+        `SELECT * FROM recurring_route_subscribers WHERE route_id=$1 AND status='approved' ORDER BY created_at ASC`,
+        [route.id]
+      );
+      let seatsLeft = route.seats_total;
+      for (const sub of approved) {
+        if (seatsLeft < 1) break;
+        const bookingId = crypto.randomUUID();
+        if (route.contribution_type !== 'price') {
+          await pool.query(
+            `INSERT INTO bookings (id,ride_id,hitcher_id,status,created_at) VALUES ($1,$2,$3,'confirmed',$4)`,
+            [bookingId, rideId, sub.hitcher_id, now()]
+          );
+          seatsLeft -= 1;
+        } else {
+          await pool.query(
+            `INSERT INTO bookings (id,ride_id,hitcher_id,status,price_cents,created_at) VALUES ($1,$2,$3,'pending',$4,$5)`,
+            [bookingId, rideId, sub.hitcher_id, route.price_cents, now()]
+          );
+        }
+      }
+      if (seatsLeft !== route.seats_total) {
+        await pool.query('UPDATE rides SET seats_available=$1 WHERE id=$2', [seatsLeft, rideId]);
+      }
+    }
+  }
+}
 
 app.post('/rides/:id/boost', requireAuth, async (req, res) => {
   try {
@@ -551,91 +786,14 @@ app.get('/prices', (req, res) => {
 
 const port = process.env.PORT || 4000;
 initDb()
-  .then(() => {
+  .then(async () => {
+    await generateRecurringRideInstances().catch(err => console.error('Recurring route generation failed:', err));
+    setInterval(() => {
+      generateRecurringRideInstances().catch(err => console.error('Recurring route generation failed:', err));
+    }, 60 * 60 * 1000); // hourly is plenty — the window is 10 days deep
     app.listen(port, () => console.log(`ridem8 running on :${port}`));
   })
   .catch(err => {
     console.error('Failed to initialize database:', err);
     process.exit(1);
   });
-
-// ==== ridem8:trip_records (s30Q) ====
-// Minister's cost-sharing rate, in cents/km. VERIFY CURRENT FIGURE before launch.
-const COST_SHARE_RATE_CENTS_PER_KM = parseInt(process.env.COST_SHARE_RATE_CENTS_PER_KM || '73', 10);
-
-// Facilitator fee, charged to the passenger as a separate line item on top of the driver's share
-const FEE_PERCENT_BY_TIER = { free: 10, hero: 8, driver_plus: 6, road_tripper: 4 };
-
-function rideCapCents(distanceKm) {
-  return Math.round(Number(distanceKm) * COST_SHARE_RATE_CENTS_PER_KM);
-}
-
-// Max per-seat price so that a FULL car never exceeds the ride cap
-function maxSeatPriceCents(distanceKm, seatsOffered) {
-  return Math.floor(rideCapCents(distanceKm) / Math.max(1, Number(seatsOffered) || 1));
-}
-
-// Use this anywhere a price is shown or charged
-function quoteFare({ distanceKm, seatsOffered, seatsBooked = 1, driverSeatPriceCents, driverTier = 'free' }) {
-  const maxSeat = maxSeatPriceCents(distanceKm, seatsOffered);
-  const requested = Math.max(0, Math.round(Number(driverSeatPriceCents) || 0));
-  const seatPriceCents = Math.min(requested, maxSeat);
-  const driverPayoutCents = seatPriceCents * seatsBooked;
-  const feePct = FEE_PERCENT_BY_TIER[driverTier] ?? FEE_PERCENT_BY_TIER.free;
-  const facilitatorFeeCents = Math.round(driverPayoutCents * feePct / 100);
-  return {
-    seatPriceCents,
-    maxSeatPriceCents: maxSeat,
-    capped: requested > maxSeat,
-    driverPayoutCents,
-    facilitatorFeeCents,
-    passengerTotalCents: driverPayoutCents + facilitatorFeeCents,
-    rateCentsPerKm: COST_SHARE_RATE_CENTS_PER_KM,
-  };
-}
-
-// Call once per successful passenger payment (safe on webhook retries)
-async function recordTrip(r) {
-  const { rows } = await pool.query(
-    'INSERT INTO trip_records (ride_id, booking_id, driver_id, passenger_id, trip_date, origin, destination, ' +
-    'distance_km, seats, rate_cents_per_km, driver_payout_cents, facilitator_fee_cents, passenger_paid_cents, ' +
-    'stripe_payment_intent_id, stripe_transfer_id) ' +
-    'VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) ' +
-    'ON CONFLICT (stripe_payment_intent_id) DO NOTHING RETURNING id',
-    [r.rideId, r.bookingId || null, r.driverId, r.passengerId, r.tripDate, r.origin, r.destination,
-     r.distanceKm, r.seats || 1, r.rateCentsPerKm, r.driverPayoutCents, r.facilitatorFeeCents,
-     r.passengerPaidCents, r.stripePaymentIntentId || null, r.stripeTransferId || null]
-  );
-  return rows[0] ? rows[0].id : null;
-}
-
-// Inspection export:  GET /admin/trip-records.csv?from=2026-01-01&to=2026-12-31
-// Requires header  x-admin-token: <ADMIN_EXPORT_TOKEN>
-app.get('/admin/trip-records.csv', async (req, res) => {
-  const token = process.env.ADMIN_EXPORT_TOKEN;
-  if (!token || req.get('x-admin-token') !== token) return res.sendStatus(403);
-  try {
-    const from = req.query.from || '1970-01-01';
-    const to = req.query.to || '2999-12-31';
-    const { rows } = await pool.query(
-      'SELECT * FROM trip_records WHERE trip_date >= $1 AND trip_date < ($2::date + 1) ORDER BY trip_date, id',
-      [from, to]
-    );
-    const cols = ['id','ride_id','booking_id','driver_id','passenger_id','trip_date','origin','destination',
-      'distance_km','seats','rate_cents_per_km','driver_payout_cents','facilitator_fee_cents',
-      'passenger_paid_cents','stripe_payment_intent_id','stripe_transfer_id','created_at'];
-    const esc = v => {
-      if (v === null || v === undefined) return '';
-      const s = v instanceof Date ? v.toISOString() : String(v);
-      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-    };
-    const csv = [cols.join(',')].concat(rows.map(row => cols.map(c => esc(row[c])).join(','))).join('\n');
-    res.set('Content-Type', 'text/csv');
-    res.set('Content-Disposition', 'attachment; filename="trip-records.csv"');
-    res.send(csv);
-  } catch (err) {
-    console.error('trip-records export failed:', err);
-    res.sendStatus(500);
-  }
-});
-// ==== end ridem8:trip_records ====
