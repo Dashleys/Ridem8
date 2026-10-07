@@ -62,6 +62,7 @@ async function initDb() {
   // price_cents on rides is the driver's reimbursement claim only (cost-share, capped by law).
   // The facilitator fee is calculated and shown separately at booking time — never folded into price_cents.
   await pool.query(`ALTER TABLE rides ADD COLUMN IF NOT EXISTS distance_km NUMERIC;`);
+  await pool.query(`ALTER TABLE rides ADD COLUMN IF NOT EXISTS ride_time TEXT;`);
   await pool.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS facilitator_fee_cents INTEGER;`);
   await pool.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS reimbursement_cents INTEGER;`);
   await pool.query(`
@@ -258,11 +259,23 @@ app.post('/drivers/connect-account', requireAuth, async (req, res) => {
 
 app.post('/rides', requireAuth, async (req, res) => {
   try {
-    const { from, to, date, seats, contributionType, priceCents, petrolNote, distanceKm } = req.body;
+    const { from, to, date, time, seats, contributionType, priceCents, petrolNote, distanceKm } = req.body;
     if (!from||!to||!seats||!contributionType)
       return res.status(400).json({ error: 'From, to, seats and contribution type are required.' });
-    if (date && date < new Date().toISOString().split('T')[0])
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (date && date < todayStr)
       return res.status(400).json({ error: 'Please choose a date from today onwards.' });
+    // A same-day listing needs a real departure time that's still ahead of us —
+    // otherwise it's posted too late for anyone to realistically see and book it.
+    if (date === todayStr) {
+      if (!time)
+        return res.status(400).json({ error: "Add a departure time for a same-day ride." });
+      const departure = new Date(`${date}T${time}:00`);
+      const minLeadMs = 30 * 60 * 1000; // 30 minutes
+      if (isNaN(departure.getTime()) || departure.getTime() < Date.now() + minLeadMs) {
+        return res.status(400).json({ error: 'Same-day rides need a departure time at least 30 minutes from now.' });
+      }
+    }
     if (containsBlockedContent(petrolNote)) return res.status(400).json({ error: 'Please remove inappropriate language from your note.' });
     if (contributionType === 'price') {
       const { rows } = await pool.query('SELECT charges_enabled FROM users WHERE id = $1', [req.userId]);
@@ -281,8 +294,8 @@ app.post('/rides', requireAuth, async (req, res) => {
     }
     const id = crypto.randomUUID();
     await pool.query(
-      `INSERT INTO rides (id,driver_id,from_loc,to_loc,ride_date,seats_total,seats_available,contribution_type,price_cents,petrol_note,created_at,distance_km) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-      [id, req.userId, from.trim(), to.trim(), date||null, seats, seats, contributionType, priceCents||null, petrolNote||null, now(), distanceKm||null]
+      `INSERT INTO rides (id,driver_id,from_loc,to_loc,ride_date,ride_time,seats_total,seats_available,contribution_type,price_cents,petrol_note,created_at,distance_km) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      [id, req.userId, from.trim(), to.trim(), date||null, time||null, seats, seats, contributionType, priceCents||null, petrolNote||null, now(), distanceKm||null]
     );
     const { rows } = await pool.query('SELECT * FROM rides WHERE id = $1', [id]);
     res.json({ ride: rows[0] });
@@ -329,7 +342,7 @@ app.get('/rides', async (req, res) => {
       bookedRideIds = new Set(myBookings.map(b => b.ride_id));
     }
     res.json({ rides: rows.map(r => ({
-      id: r.id, from: r.from_loc, to: r.to_loc, date: r.ride_date,
+      id: r.id, from: r.from_loc, to: r.to_loc, date: r.ride_date, time: r.ride_time,
       seatsAvailable: r.seats_available, contributionType: r.contribution_type,
       priceCents: r.price_cents, distanceKm: r.distance_km, petrolNote: r.petrol_note, isBoosted: !!(r.boosted_until && new Date(r.boosted_until) > new Date()), driverName: r.driver_name, driverId: r.driver_id,
       driverRating: r.rating_count ? Math.round((r.rating_sum/r.rating_count)*10)/10 : null,
@@ -545,3 +558,84 @@ initDb()
     console.error('Failed to initialize database:', err);
     process.exit(1);
   });
+
+// ==== ridem8:trip_records (s30Q) ====
+// Minister's cost-sharing rate, in cents/km. VERIFY CURRENT FIGURE before launch.
+const COST_SHARE_RATE_CENTS_PER_KM = parseInt(process.env.COST_SHARE_RATE_CENTS_PER_KM || '73', 10);
+
+// Facilitator fee, charged to the passenger as a separate line item on top of the driver's share
+const FEE_PERCENT_BY_TIER = { free: 10, hero: 8, driver_plus: 6, road_tripper: 4 };
+
+function rideCapCents(distanceKm) {
+  return Math.round(Number(distanceKm) * COST_SHARE_RATE_CENTS_PER_KM);
+}
+
+// Max per-seat price so that a FULL car never exceeds the ride cap
+function maxSeatPriceCents(distanceKm, seatsOffered) {
+  return Math.floor(rideCapCents(distanceKm) / Math.max(1, Number(seatsOffered) || 1));
+}
+
+// Use this anywhere a price is shown or charged
+function quoteFare({ distanceKm, seatsOffered, seatsBooked = 1, driverSeatPriceCents, driverTier = 'free' }) {
+  const maxSeat = maxSeatPriceCents(distanceKm, seatsOffered);
+  const requested = Math.max(0, Math.round(Number(driverSeatPriceCents) || 0));
+  const seatPriceCents = Math.min(requested, maxSeat);
+  const driverPayoutCents = seatPriceCents * seatsBooked;
+  const feePct = FEE_PERCENT_BY_TIER[driverTier] ?? FEE_PERCENT_BY_TIER.free;
+  const facilitatorFeeCents = Math.round(driverPayoutCents * feePct / 100);
+  return {
+    seatPriceCents,
+    maxSeatPriceCents: maxSeat,
+    capped: requested > maxSeat,
+    driverPayoutCents,
+    facilitatorFeeCents,
+    passengerTotalCents: driverPayoutCents + facilitatorFeeCents,
+    rateCentsPerKm: COST_SHARE_RATE_CENTS_PER_KM,
+  };
+}
+
+// Call once per successful passenger payment (safe on webhook retries)
+async function recordTrip(r) {
+  const { rows } = await pool.query(
+    'INSERT INTO trip_records (ride_id, booking_id, driver_id, passenger_id, trip_date, origin, destination, ' +
+    'distance_km, seats, rate_cents_per_km, driver_payout_cents, facilitator_fee_cents, passenger_paid_cents, ' +
+    'stripe_payment_intent_id, stripe_transfer_id) ' +
+    'VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) ' +
+    'ON CONFLICT (stripe_payment_intent_id) DO NOTHING RETURNING id',
+    [r.rideId, r.bookingId || null, r.driverId, r.passengerId, r.tripDate, r.origin, r.destination,
+     r.distanceKm, r.seats || 1, r.rateCentsPerKm, r.driverPayoutCents, r.facilitatorFeeCents,
+     r.passengerPaidCents, r.stripePaymentIntentId || null, r.stripeTransferId || null]
+  );
+  return rows[0] ? rows[0].id : null;
+}
+
+// Inspection export:  GET /admin/trip-records.csv?from=2026-01-01&to=2026-12-31
+// Requires header  x-admin-token: <ADMIN_EXPORT_TOKEN>
+app.get('/admin/trip-records.csv', async (req, res) => {
+  const token = process.env.ADMIN_EXPORT_TOKEN;
+  if (!token || req.get('x-admin-token') !== token) return res.sendStatus(403);
+  try {
+    const from = req.query.from || '1970-01-01';
+    const to = req.query.to || '2999-12-31';
+    const { rows } = await pool.query(
+      'SELECT * FROM trip_records WHERE trip_date >= $1 AND trip_date < ($2::date + 1) ORDER BY trip_date, id',
+      [from, to]
+    );
+    const cols = ['id','ride_id','booking_id','driver_id','passenger_id','trip_date','origin','destination',
+      'distance_km','seats','rate_cents_per_km','driver_payout_cents','facilitator_fee_cents',
+      'passenger_paid_cents','stripe_payment_intent_id','stripe_transfer_id','created_at'];
+    const esc = v => {
+      if (v === null || v === undefined) return '';
+      const s = v instanceof Date ? v.toISOString() : String(v);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const csv = [cols.join(',')].concat(rows.map(row => cols.map(c => esc(row[c])).join(','))).join('\n');
+    res.set('Content-Type', 'text/csv');
+    res.set('Content-Disposition', 'attachment; filename="trip-records.csv"');
+    res.send(csv);
+  } catch (err) {
+    console.error('trip-records export failed:', err);
+    res.sendStatus(500);
+  }
+});
+// ==== end ridem8:trip_records ====
