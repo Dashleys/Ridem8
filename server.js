@@ -62,6 +62,7 @@ async function initDb() {
   // price_cents on rides is the driver's reimbursement claim only (cost-share, capped by law).
   // The facilitator fee is calculated and shown separately at booking time — never folded into price_cents.
   await pool.query(`ALTER TABLE rides ADD COLUMN IF NOT EXISTS distance_km NUMERIC;`);
+  await pool.query(`ALTER TABLE rides ADD COLUMN IF NOT EXISTS departure_time TEXT;`);
   await pool.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS facilitator_fee_cents INTEGER;`);
   await pool.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS reimbursement_cents INTEGER;`);
   await pool.query(`
@@ -306,7 +307,7 @@ app.post('/drivers/connect-account', requireAuth, async (req, res) => {
 
 app.post('/rides', requireAuth, async (req, res) => {
   try {
-    const { from, to, date, seats, contributionType, priceCents, petrolNote, distanceKm } = req.body;
+    const { from, to, date, departureTime, seats, contributionType, priceCents, petrolNote, distanceKm } = req.body;
     if (!from||!to||!seats||!contributionType)
       return res.status(400).json({ error: 'From, to, seats and contribution type are required.' });
     if (date && date < new Date().toISOString().split('T')[0])
@@ -329,8 +330,8 @@ app.post('/rides', requireAuth, async (req, res) => {
     }
     const id = crypto.randomUUID();
     await pool.query(
-      `INSERT INTO rides (id,driver_id,from_loc,to_loc,ride_date,seats_total,seats_available,contribution_type,price_cents,petrol_note,created_at,distance_km) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-      [id, req.userId, from.trim(), to.trim(), date||null, seats, seats, contributionType, priceCents||null, petrolNote||null, now(), distanceKm||null]
+      `INSERT INTO rides (id,driver_id,from_loc,to_loc,ride_date,seats_total,seats_available,contribution_type,price_cents,petrol_note,created_at,distance_km,departure_time) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      [id, req.userId, from.trim(), to.trim(), date||null, seats, seats, contributionType, priceCents||null, petrolNote||null, now(), distanceKm||null, departureTime||null]
     );
     const { rows } = await pool.query('SELECT * FROM rides WHERE id = $1', [id]);
     res.json({ ride: rows[0] });
@@ -379,7 +380,7 @@ app.get('/rides', async (req, res) => {
     res.json({ rides: rows.map(r => ({
       id: r.id, from: r.from_loc, to: r.to_loc, date: r.ride_date,
       seatsAvailable: r.seats_available, contributionType: r.contribution_type,
-      priceCents: r.price_cents, distanceKm: r.distance_km, petrolNote: r.petrol_note, isBoosted: !!(r.boosted_until && new Date(r.boosted_until) > new Date()), isRegular: !!r.recurring_route_id, driverName: r.driver_name, driverId: r.driver_id,
+      priceCents: r.price_cents, distanceKm: r.distance_km, petrolNote: r.petrol_note, departureTime: r.departure_time, isBoosted: !!(r.boosted_until && new Date(r.boosted_until) > new Date()), isRegular: !!r.recurring_route_id, driverName: r.driver_name, driverId: r.driver_id,
       driverRating: r.rating_count ? Math.round((r.rating_sum/r.rating_count)*10)/10 : null,
       alreadyBooked: bookedRideIds.has(r.id),
     })) });
@@ -654,10 +655,10 @@ async function generateRecurringRideInstances() {
       if (existing.length > 0) continue;
       const rideId = crypto.randomUUID();
       await pool.query(
-        `INSERT INTO rides (id,driver_id,from_loc,to_loc,ride_date,seats_total,seats_available,contribution_type,price_cents,petrol_note,created_at,distance_km,recurring_route_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        `INSERT INTO rides (id,driver_id,from_loc,to_loc,ride_date,seats_total,seats_available,contribution_type,price_cents,petrol_note,created_at,distance_km,recurring_route_id,departure_time)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [rideId, route.driver_id, route.from_loc, route.to_loc, dateStr, route.seats_total, route.seats_total,
-         route.contribution_type, route.price_cents, route.petrol_note, now(), route.distance_km, route.id]
+         route.contribution_type, route.price_cents, route.petrol_note, now(), route.distance_km, route.id, route.departure_time]
       );
       const { rows: approved } = await pool.query(
         `SELECT * FROM recurring_route_subscribers WHERE route_id=$1 AND status='approved' ORDER BY created_at ASC`,
@@ -716,6 +717,66 @@ app.post('/rides/:id/boost', requireAuth, async (req, res) => {
       success_url: `${APP_URL}/?boosted=1`, cancel_url: `${APP_URL}/?cancelled=1`,
     });
     res.json({ url: session.url });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Cancelling within this many hours of departure still frees the seat and
+// notifies the driver, but forfeits any refund — so there's no incentive to
+// bail right before the driver can realistically fill the seat some other way.
+// Only enforced when the ride has both a date and a departure time set; rides
+// without one (flexible/no-date listings) have nothing to measure against, so
+// they stay freely refundable.
+const CANCELLATION_CUTOFF_HOURS = parseInt(process.env.CANCELLATION_CUTOFF_HOURS || '3', 10);
+function isLateCancellation(ride) {
+  if (!ride.ride_date || !ride.departure_time) return false;
+  const departure = new Date(`${ride.ride_date}T${ride.departure_time}:00`);
+  if (isNaN(departure.getTime())) return false;
+  const hoursUntilDeparture = (departure.getTime() - Date.now()) / (1000 * 60 * 60);
+  return hoursUntilDeparture < CANCELLATION_CUTOFF_HOURS;
+}
+
+// Lets a hitcher cancel their own booking. Restores the seat and notifies the
+// driver either way. If payment already went through AND it's outside the
+// cancellation cutoff, reverses both the driver's payout and ridem8's
+// facilitator fee via a single Stripe refund; inside the cutoff, no refund.
+app.post('/bookings/:id/cancel', requireAuth, async (req, res) => {
+  try {
+    const { rows: bookingRows } = await pool.query('SELECT * FROM bookings WHERE id=$1', [req.params.id]);
+    const booking = bookingRows[0];
+    if (!booking) return res.status(404).json({ error: 'Booking not found.' });
+    if (booking.hitcher_id !== req.userId) return res.status(403).json({ error: 'Only the person who booked this seat can cancel it.' });
+    if (booking.status === 'cancelled') return res.status(400).json({ error: 'This booking is already cancelled.' });
+    if (booking.status === 'completed') return res.status(400).json({ error: "This ride's already completed — it can't be cancelled." });
+
+    const { rows: rideRows } = await pool.query('SELECT * FROM rides WHERE id=$1', [booking.ride_id]);
+    const ride = rideRows[0];
+    const lateCancellation = isLateCancellation(ride);
+
+    let refunded = false;
+    if (booking.status === 'paid' && booking.stripe_session_id && !lateCancellation) {
+      try {
+        const session = await stripe.checkout.sessions.retrieve(booking.stripe_session_id);
+        if (session.payment_intent) {
+          await stripe.refunds.create({
+            payment_intent: session.payment_intent,
+            reverse_transfer: true,
+            refund_application_fee: true,
+          });
+          refunded = true;
+        }
+      } catch (err) {
+        console.error('Refund failed for booking', booking.id, err.message);
+      }
+    }
+
+    await pool.query(`UPDATE bookings SET status='cancelled' WHERE id=$1`, [booking.id]);
+    if (booking.status === 'confirmed' || booking.status === 'paid') {
+      await pool.query('UPDATE rides SET seats_available=seats_available+1 WHERE id=$1', [ride.id]);
+    }
+    const { rows: hitcherRows } = await pool.query('SELECT name FROM users WHERE id=$1', [req.userId]);
+    const lateNote = lateCancellation ? ' (late cancellation — inside the free-cancellation window)' : '';
+    await notify(ride.driver_id, 'cancellation', `${hitcherRows[0]?.name || 'A passenger'} cancelled their seat on your ${ride.from_loc} → ${ride.to_loc} ride${ride.ride_date ? ' on ' + ride.ride_date : ''}${lateNote}.`);
+    res.json({ ok: true, refunded, lateCancellation });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
