@@ -117,6 +117,22 @@ async function initDb() {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_rides_recurring_unique
     ON rides (recurring_route_id, ride_date) WHERE recurring_route_id IS NOT NULL;
   `);
+  // ── Notifications (join requests, approvals, bookings) ──────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id),
+      type TEXT NOT NULL, message TEXT NOT NULL,
+      read BOOLEAN NOT NULL DEFAULT false, created_at TEXT NOT NULL
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications (user_id, created_at DESC);`);
+}
+
+async function notify(userId, type, message) {
+  await pool.query(
+    `INSERT INTO notifications (id,user_id,type,message,created_at) VALUES ($1,$2,$3,$4,$5)`,
+    [crypto.randomUUID(), userId, type, message, now()]
+  );
 }
 
 // ── Auth helpers ───────────────────────────────────────────────────────────
@@ -185,6 +201,11 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
         if (booking?.status === 'pending') {
           await pool.query(`UPDATE bookings SET status = 'paid' WHERE id = $1`, [bookingId]);
           await pool.query('UPDATE rides SET seats_available = seats_available - 1 WHERE id = $1', [booking.ride_id]);
+          const { rows: rideRows } = await pool.query('SELECT driver_id, from_loc, to_loc FROM rides WHERE id=$1', [booking.ride_id]);
+          const { rows: hitcherRows } = await pool.query('SELECT name FROM users WHERE id=$1', [booking.hitcher_id]);
+          if (rideRows[0]) {
+            await notify(rideRows[0].driver_id, 'booking', `${hitcherRows[0]?.name || 'Someone'} paid for a seat on your ${rideRows[0].from_loc} → ${rideRows[0].to_loc} ride.`);
+          }
         }
       }
       if (kind === 'subscription' && userId) {
@@ -384,6 +405,8 @@ app.post('/rides/:id/book', requireAuth, async (req, res) => {
         [bookingId, ride.id, req.userId, now()]
       );
       await pool.query('UPDATE rides SET seats_available=seats_available-1 WHERE id=$1', [ride.id]);
+      const { rows: hitcherRows } = await pool.query('SELECT name FROM users WHERE id=$1', [req.userId]);
+      await notify(ride.driver_id, 'booking', `${hitcherRows[0]?.name || 'Someone'} booked a seat on your ${ride.from_loc} → ${ride.to_loc} ride.`);
       return res.json({ booking: { id: bookingId, status: 'confirmed' } });
     }
     const { rows: driverRows } = await pool.query('SELECT stripe_account_id, rides_completed, subscription_status, subscription_tier FROM users WHERE id=$1', [ride.driver_id]);
@@ -575,6 +598,8 @@ app.post('/recurring-routes/:id/join', requireAuth, async (req, res) => {
       if (err.code === '23505') return res.status(409).json({ error: "You've already requested to join this route." });
       throw err;
     }
+    const { rows: hitcherRows } = await pool.query('SELECT name FROM users WHERE id=$1', [req.userId]);
+    await notify(route.driver_id, 'join_request', `${hitcherRows[0]?.name || 'Someone'} wants to join your ${route.from_loc} → ${route.to_loc} regular route.`);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -587,7 +612,13 @@ app.post('/recurring-routes/:routeId/subscribers/:subId/:action', requireAuth, a
     const route = routeRows[0];
     if (!route || route.driver_id !== req.userId) return res.status(403).json({ error: 'Only the route owner can do this.' });
     const status = action === 'approve' ? 'approved' : 'declined';
-    await pool.query('UPDATE recurring_route_subscribers SET status=$1 WHERE id=$2 AND route_id=$3', [status, subId, routeId]);
+    const { rows: subRows } = await pool.query(
+      'UPDATE recurring_route_subscribers SET status=$1 WHERE id=$2 AND route_id=$3 RETURNING hitcher_id', [status, subId, routeId]
+    );
+    if (subRows[0]) {
+      const verb = status === 'approved' ? 'approved you for' : 'declined your request to join';
+      await notify(subRows[0].hitcher_id, 'join_response', `The driver ${verb} the ${route.from_loc} → ${route.to_loc} regular route.`);
+    }
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -642,11 +673,13 @@ async function generateRecurringRideInstances() {
             [bookingId, rideId, sub.hitcher_id, now()]
           );
           seatsLeft -= 1;
+          await notify(sub.hitcher_id, 'regular_seat', `Your seat on ${route.from_loc} → ${route.to_loc} for ${dateStr} is confirmed.`);
         } else {
           await pool.query(
             `INSERT INTO bookings (id,ride_id,hitcher_id,status,price_cents,created_at) VALUES ($1,$2,$3,'pending',$4,$5)`,
             [bookingId, rideId, sub.hitcher_id, route.price_cents, now()]
           );
+          await notify(sub.hitcher_id, 'regular_seat', `Your seat on ${route.from_loc} → ${route.to_loc} for ${dateStr} is held — pay to confirm it.`);
         }
       }
       if (seatsLeft !== route.seats_total) {
@@ -772,6 +805,32 @@ app.post('/addons/checkout', async (req, res) => {
       success_url: `${APP_URL}/?addon=success`, cancel_url: `${APP_URL}/?cancelled=1`,
     });
     res.json({ url: session.url });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/notifications', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM notifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT 30`, [req.userId]
+    );
+    const { rows: countRows } = await pool.query(
+      `SELECT COUNT(*) FROM notifications WHERE user_id=$1 AND read=false`, [req.userId]
+    );
+    res.json({ notifications: rows, unreadCount: parseInt(countRows[0].count, 10) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/notifications/read-all', requireAuth, async (req, res) => {
+  try {
+    await pool.query('UPDATE notifications SET read=true WHERE user_id=$1 AND read=false', [req.userId]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/notifications/:id/read', requireAuth, async (req, res) => {
+  try {
+    await pool.query('UPDATE notifications SET read=true WHERE id=$1 AND user_id=$2', [req.params.id, req.userId]);
+    res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
