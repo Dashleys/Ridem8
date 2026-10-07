@@ -190,7 +190,7 @@
   }
   .choice:hover{border-color:var(--amber);}
   .choice input{accent-color:var(--amber);margin:0;}
-  .choice.checked{border-color:var(--amber);background:rgba(224,138,55,0.12);color:var(--paper);}
+  .choice.checked{border-color:var(--amber);background:rgba(224,138,55,0.12);color:var(--ink);font-weight:600;}
   .stepper{display:flex;align-items:center;gap:14px;}
   .stepper button{
     width:34px;height:34px;border-radius:50%;border:1.5px solid var(--line-dark);background:var(--asphalt-soft);
@@ -419,7 +419,7 @@
       <a href="#rewards" id="nav-rewards-link">Rewards</a>
       <a href="#pricing" id="nav-pricing-link">Pricing</a>
       <a href="#my-activity" id="nav-activity-link" style="display:none;">My activity</a>
-      <a href="#regulars" id="nav-regulars-link" style="display:none;">Regulars</a>
+      <a href="#regulars" id="nav-regulars-link" style="display:none;">Regular routes</a>
     </nav>
     <div id="nav-auth-area">
       <button class="btn btn-ghost" onclick="openModal('login')" style="margin-right:8px;">Log in</button>
@@ -736,35 +736,50 @@
   <div class="wrap">
     <div class="section-head">
       <span class="eyebrow">Same faces, same route</span>
-      <h2>Regulars</h2>
+      <h2>Regular routes</h2>
       <p class="sub">Post a route you do every week so the same people can ride with you each time — no re-posting, no re-booking.</p>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:48px;">
       <div>
         <h3 style="font-size:18px;margin-bottom:14px;">Post a regular route (driver)</h3>
-        <form id="regular-route-form" onsubmit="submitRegularRoute(event)" style="display:flex;flex-direction:column;gap:10px;">
-          <input type="text" id="rr-from" placeholder="From (e.g. Wanaka)" required>
-          <input type="text" id="rr-to" placeholder="To (e.g. Cromwell)" required>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d,i)=>`
-              <label class="choice" style="font-size:12px;padding:6px 10px;">
-                <input type="checkbox" name="rr-day" value="${i}"> ${d}
-              </label>`).join('')}
+        <form id="regular-route-form" onsubmit="submitRegularRoute(event)">
+          <div class="row-2">
+            <div class="field"><label>From</label><input required placeholder="e.g. Wanaka" id="rr-from" list="nz-towns"></div>
+            <div class="field"><label>To</label><input required placeholder="e.g. Cromwell" id="rr-to" list="nz-towns"></div>
           </div>
-          <input type="time" id="rr-time" required>
-          <input type="number" id="rr-seats" placeholder="Seats available" min="1" max="6" value="2" required>
-          <div class="choice-row">
-            ${Object.keys(CONTRIB_MAP).map(label=>`
-              <label class="choice">
-                <input type="radio" name="rr-contrib" value="${label}" ${label==='Free'?'checked':''}> ${label}
-              </label>`).join('')}
+          <div class="field"><label>Which days</label>
+            <div class="choice-grid">
+              <label class="choice"><input type="checkbox" name="rr-day" value="1">Mon</label>
+              <label class="choice"><input type="checkbox" name="rr-day" value="2">Tue</label>
+              <label class="choice"><input type="checkbox" name="rr-day" value="3">Wed</label>
+              <label class="choice"><input type="checkbox" name="rr-day" value="4">Thu</label>
+              <label class="choice"><input type="checkbox" name="rr-day" value="5">Fri</label>
+              <label class="choice"><input type="checkbox" name="rr-day" value="6">Sat</label>
+              <label class="choice"><input type="checkbox" name="rr-day" value="0">Sun</label>
+            </div>
           </div>
-          <input type="number" id="rr-price" placeholder="Price per seat ($)" style="display:none;">
-          <input type="text" id="rr-distance" placeholder="Distance (km) — needed if setting a price" style="display:none;">
-          <input type="text" id="rr-petrol-note" placeholder="Petrol note (optional)" style="display:none;">
-          <button class="btn btn-amber" type="submit">Post regular route</button>
-          <p id="rr-result" style="font-family:var(--font-mono);font-size:11.5px;margin:0;"></p>
+          <div class="field" style="cursor:pointer;" onclick="document.getElementById('rr-time').showPicker && document.getElementById('rr-time').showPicker()"><label>Departure time</label><input type="time" id="rr-time" required style="cursor:pointer;"></div>
+          <div class="field"><label>Seats available</label>
+            <div class="stepper">
+              <button type="button" onclick="stepRegularSeats(-1)">−</button>
+              <span id="rr-seat-count">2</span>
+              <button type="button" onclick="stepRegularSeats(1)">+</button>
+            </div>
+          </div>
+          <div class="field"><label>What riders can offer</label>
+            <div class="choice-grid">
+              <label class="choice"><input type="radio" name="rr-contrib" value="Free, just good company" checked onclick="toggleRegularContribFields(this.value)">Free, just good company</label>
+              <label class="choice"><input type="radio" name="rr-contrib" value="Snacks only" onclick="toggleRegularContribFields(this.value)">Snacks only</label>
+              <label class="choice"><input type="radio" name="rr-contrib" value="Split the petrol" onclick="toggleRegularContribFields(this.value)">Split the petrol</label>
+              <label class="choice"><input type="radio" name="rr-contrib" value="Set a price" onclick="toggleRegularContribFields(this.value)">Set a price</label>
+            </div>
+          </div>
+          <div class="field" id="rr-price-field" style="display:none;"><label>Price per seat (NZD)</label><input type="number" min="1" placeholder="15" id="rr-price"></div>
+          <div class="field" id="rr-distance-field" style="display:none;"><label>Distance (km)</label><input type="number" min="0" step="0.1" placeholder="e.g. 68" id="rr-distance"></div>
+          <div class="field" id="rr-petrol-field" style="display:none;"><label>Suggested contribution (optional)</label><input type="text" placeholder="e.g. ~$15 towards gas" id="rr-petrol-note"></div>
+          <div class="submit-row"><button type="submit" class="btn btn-amber">Post regular route</button></div>
+          <p id="rr-result" style="font-family:var(--font-mono);font-size:11.5px;margin:10px 0 0;"></p>
         </form>
       </div>
 
@@ -1498,13 +1513,16 @@
   });
   // ---------- regulars ----------
   function toggleRegularContribFields(value){
-    document.getElementById('rr-price').style.display = value === 'Set a price' ? 'block' : 'none';
-    document.getElementById('rr-distance').style.display = value === 'Set a price' ? 'block' : 'none';
-    document.getElementById('rr-petrol-note').style.display = value === 'Split the petrol' ? 'block' : 'none';
+    document.getElementById('rr-price-field').style.display = value === 'Set a price' ? 'block' : 'none';
+    document.getElementById('rr-distance-field').style.display = value === 'Set a price' ? 'block' : 'none';
+    document.getElementById('rr-petrol-field').style.display = value === 'Split the petrol' ? 'block' : 'none';
   }
-  document.querySelectorAll('input[name="rr-contrib"]').forEach(function(i){
-    i.addEventListener('change', function(){ toggleRegularContribFields(i.value); });
-  });
+
+  let regularSeats = 2;
+  function stepRegularSeats(d){
+    regularSeats = Math.max(1, Math.min(6, regularSeats+d));
+    document.getElementById('rr-seat-count').textContent = regularSeats;
+  }
 
   const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   function daysLabel(days){ return (days||[]).slice().sort().map(function(d){ return DAY_NAMES[d]; }).join('/'); }
@@ -1515,7 +1533,7 @@
     const to = document.getElementById('rr-to').value;
     const daysOfWeek = Array.from(document.querySelectorAll('input[name="rr-day"]:checked')).map(function(i){ return parseInt(i.value, 10); });
     const departureTime = document.getElementById('rr-time').value;
-    const seats = parseInt(document.getElementById('rr-seats').value, 10);
+    const seats = regularSeats;
     const contribLabel = document.querySelector('input[name="rr-contrib"]:checked').value;
     const contributionType = CONTRIB_MAP[contribLabel];
     const price = document.getElementById('rr-price').value;
@@ -1540,6 +1558,9 @@
       result.style.color = 'var(--sage)';
       result.textContent = '✓ REGULAR ROUTE POSTED';
       document.getElementById('regular-route-form').reset();
+      regularSeats = 2;
+      document.getElementById('rr-seat-count').textContent = regularSeats;
+      toggleRegularContribFields('Free, just good company');
       loadRegulars();
     } catch (err) {
       result.style.color = 'var(--rust)';
