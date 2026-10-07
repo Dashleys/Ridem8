@@ -936,6 +936,22 @@
     const activityLink = document.getElementById('nav-activity-link');
     if (currentUser) {
       authArea.innerHTML = `
+        <div style="position:relative;display:inline-block;margin-right:14px;vertical-align:middle;">
+          <button id="notif-bell-btn" onclick="toggleNotifDropdown(event)" aria-label="Notifications" style="background:none;border:none;cursor:pointer;padding:6px;position:relative;line-height:0;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6Z"/>
+              <path d="M10 19a2 2 0 0 0 4 0"/>
+            </svg>
+            <span id="notif-badge" style="display:none;position:absolute;top:2px;right:2px;background:var(--rust);color:var(--paper);font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:50%;align-items:center;justify-content:center;padding:0 3px;"></span>
+          </button>
+          <div id="notif-dropdown" style="display:none;position:absolute;top:100%;right:0;margin-top:8px;width:320px;max-height:380px;overflow-y:auto;background:var(--white);border:1px solid var(--line);border-radius:var(--radius-m);box-shadow:var(--shadow-card);z-index:100;">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);">
+              <b style="font-size:13.5px;">Notifications</b>
+              <button onclick="markAllNotifsRead()" style="background:none;border:none;color:var(--amber);font-size:12px;cursor:pointer;">Mark all read</button>
+            </div>
+            <div id="notif-list" style="padding:6px;"></div>
+          </div>
+        </div>
         <span style="font-size:13.5px;color:var(--ink-soft);margin-right:12px;">Hi, ${currentUser.name.split(' ')[0]}</span>
         <button class="btn btn-ghost" onclick="logout()">Log out</button>`;
       activityLink.style.display = 'inline';
@@ -948,6 +964,11 @@
       document.getElementById('nav-rewards-link').style.display = 'none';
       loadMyActivity();
       loadRegulars();
+      loadNotifications();
+      if (!window._notifPollStarted) {
+        window._notifPollStarted = true;
+        setInterval(() => { if (currentUser) loadNotifications(); }, 45000);
+      }
     } else {
       authArea.innerHTML = `
         <button class="btn btn-ghost" onclick="openModal('login')" style="margin-right:8px;">Log in</button>
@@ -1511,6 +1532,83 @@
     e.target.classList.add('active');
     renderRouteRequests(e.target.dataset.filter);
   });
+  // ---------- notifications ----------
+  function timeAgo(iso){
+    const diffMs = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return mins + 'm ago';
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return hrs + 'h ago';
+    return Math.floor(hrs / 24) + 'd ago';
+  }
+
+  async function loadNotifications(){
+    try {
+      const { notifications, unreadCount } = await api('/notifications');
+      renderNotifBadge(unreadCount);
+      renderNotifList(notifications);
+    } catch { /* fail quietly — notifications aren't critical path */ }
+  }
+
+  function renderNotifBadge(count){
+    const badge = document.getElementById('notif-badge');
+    if (!badge) return;
+    if (count > 0) {
+      badge.style.display = 'flex';
+      badge.textContent = count > 9 ? '9+' : count;
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+
+  function renderNotifList(notifications){
+    const list = document.getElementById('notif-list');
+    if (!list) return;
+    if (!notifications.length) {
+      list.innerHTML = '<p style="color:var(--ink-soft);font-size:13px;padding:14px;text-align:center;">No notifications yet.</p>';
+      return;
+    }
+    list.innerHTML = notifications.map(function(n){
+      return '<div onclick="markNotifRead(\'' + n.id + '\', this)" style="padding:10px 10px;border-radius:8px;cursor:pointer;background:' + (n.read ? 'transparent' : 'rgba(224,138,55,0.08)') + ';">' +
+        '<p style="font-size:13px;margin:0;color:var(--ink);' + (n.read ? '' : 'font-weight:600;') + '">' + n.message + '</p>' +
+        '<p style="font-size:11px;margin:4px 0 0;color:var(--ink-soft);">' + timeAgo(n.created_at) + '</p>' +
+      '</div>';
+    }).join('');
+  }
+
+  function toggleNotifDropdown(e){
+    e.stopPropagation();
+    const dropdown = document.getElementById('notif-dropdown');
+    const opening = dropdown.style.display === 'none';
+    dropdown.style.display = opening ? 'block' : 'none';
+    if (opening) loadNotifications();
+  }
+  document.addEventListener('click', function(e){
+    const dropdown = document.getElementById('notif-dropdown');
+    const btn = document.getElementById('notif-bell-btn');
+    if (dropdown && dropdown.style.display === 'block' && !dropdown.contains(e.target) && e.target !== btn) {
+      dropdown.style.display = 'none';
+    }
+  });
+
+  async function markNotifRead(id, el){
+    el.style.background = 'transparent';
+    el.querySelector('p').style.fontWeight = 'normal';
+    try {
+      await api('/notifications/' + id + '/read', { method: 'POST' });
+      const { unreadCount } = await api('/notifications');
+      renderNotifBadge(unreadCount);
+    } catch {}
+  }
+
+  async function markAllNotifsRead(){
+    try {
+      await api('/notifications/read-all', { method: 'POST' });
+      loadNotifications();
+    } catch {}
+  }
+
   // ---------- regulars ----------
   function toggleRegularContribFields(value){
     document.getElementById('rr-price-field').style.display = value === 'Set a price' ? 'block' : 'none';
