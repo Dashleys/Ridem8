@@ -1820,14 +1820,14 @@
     while (box && box.querySelectorAll('input[list="nz-towns"]').length < 2) box = box.parentElement;
     if (box == null) return;
     var towns = box.querySelectorAll('input[list="nz-towns"]');
-    var seats = box.querySelector('[id$="seats"]');
+    var seats = box.querySelector('[id$="seat-count"]');
     var hint = document.createElement('div');
     hint.style.fontSize = '0.85em';
     hint.style.marginTop = '4px';
     dist.insertAdjacentElement('afterend', hint);
     var cap = 0;
     function showMax() {
-      var n = seats ? Number(seats.value) : 0;
+      var n = seats ? Number(seats.textContent) : 0;
       if (cap > 0 && n > 0) hint.textContent = 'Max $' + (Math.floor(cap / n) / 100).toFixed(2) + ' per seat for ' + n + ' seat(s)';
       else if (cap > 0) hint.textContent = 'Max $' + (cap / 100).toFixed(2) + ' total for the trip';
     }
@@ -1845,7 +1845,7 @@
     }
     towns[0].addEventListener('change', update);
     towns[1].addEventListener('change', update);
-    if (seats) { seats.addEventListener('input', showMax); seats.addEventListener('change', showMax); }
+    if (seats) new MutationObserver(showMax).observe(seats, { childList: true, characterData: true, subtree: true });
   }
   setup('d-distance');
   setup('rr-distance');
