@@ -207,6 +207,27 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
           if (rideRows[0]) {
             await notify(rideRows[0].driver_id, 'booking', `${hitcherRows[0]?.name || 'Someone'} paid for a seat on your ${rideRows[0].from_loc} → ${rideRows[0].to_loc} ride.`);
           }
+          // s30Q trip record. Failure is logged so the booking still completes.
+          try {
+            const { rows: rr } = await pool.query('SELECT * FROM rides WHERE id=$1', [booking.ride_id]);
+            const { rows: br } = await pool.query('SELECT * FROM bookings WHERE id=$1', [bookingId]);
+            const ride = rr[0];
+            const bk = br[0];
+            const session = event.data.object;
+            const piId = session.payment_intent;
+            let transferId = null;
+            if (piId) {
+              const pi = await stripe.paymentIntents.retrieve(piId, { expand: ['latest_charge'] });
+              transferId = (pi.latest_charge && pi.latest_charge.transfer) || null;
+            }
+            let tripDate = new Date(ride.ride_date);
+            if (isNaN(tripDate.getTime())) tripDate = new Date();
+            const rate = Number(process.env.RATE_CENTS_PER_KM || 73);
+            await pool.query(
+              'INSERT INTO trip_records (ride_id, booking_id, driver_id, passenger_id, trip_date, origin, destination, distance_km, seats, rate_cents_per_km, driver_payout_cents, facilitator_fee_cents, passenger_paid_cents, stripe_payment_intent_id, stripe_transfer_id, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,1,$9,$10,$11,$12,$13,$14,NOW()) ON CONFLICT (stripe_payment_intent_id) DO NOTHING',
+              [ride.id, bk.id, ride.driver_id, bk.hitcher_id, tripDate, ride.from_loc, ride.to_loc, ride.distance_km, rate, bk.reimbursement_cents, bk.facilitator_fee_cents, session.amount_total, piId, transferId]
+            );
+          } catch (e) { console.error('trip_records insert failed:', e.message); }
         }
       }
       if (kind === 'subscription' && userId) {
