@@ -222,7 +222,7 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
             }
             let tripDate = new Date(ride.ride_date);
             if (isNaN(tripDate.getTime())) tripDate = new Date();
-            const rate = Number(process.env.RATE_CENTS_PER_KM || 73);
+            const rate = MAX_REIMBURSEMENT_PER_KM_CENTS;
             await pool.query(
               'INSERT INTO trip_records (ride_id, booking_id, driver_id, passenger_id, trip_date, origin, destination, distance_km, seats, rate_cents_per_km, driver_payout_cents, facilitator_fee_cents, passenger_paid_cents, stripe_payment_intent_id, stripe_transfer_id, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,1,$9,$10,$11,$12,$13,$14,NOW()) ON CONFLICT (stripe_payment_intent_id) DO NOTHING',
               [ride.id, bk.id, ride.driver_id, bk.hitcher_id, tripDate, ride.from_loc, ride.to_loc, ride.distance_km, rate, bk.reimbursement_cents, bk.facilitator_fee_cents, session.amount_total, piId, transferId]
@@ -343,9 +343,13 @@ app.post('/rides', requireAuth, async (req, res) => {
         return res.status(400).json({ error: 'Set a price greater than zero.' });
       // Reimbursement (what the driver claims for fuel/vehicle cost) must stay under the
       // gazetted per-km cap so the ride qualifies as cost-sharing rather than a commercial fare.
-      if (distanceKm && priceCents > Math.round(distanceKm * MAX_REIMBURSEMENT_PER_KM_CENTS)) {
+      if ((Number(distanceKm) > 0) === false)
+        return res.status(400).json({ error: 'Enter the trip distance in km.' });
+      const capCents = Math.round(Number(distanceKm) * MAX_REIMBURSEMENT_PER_KM_CENTS);
+      const maxPerSeat = Math.floor(capCents / Number(seats));
+      if (priceCents > maxPerSeat) {
         return res.status(400).json({
-          error: `Reimbursement can't exceed $${(MAX_REIMBURSEMENT_PER_KM_CENTS/100).toFixed(2)}/km. For ${distanceKm}km, the max is $${(Math.round(distanceKm * MAX_REIMBURSEMENT_PER_KM_CENTS)/100).toFixed(2)}.`
+          error: 'For ' + distanceKm + ' km with ' + seats + ' seats, the max price per seat is $' + (maxPerSeat / 100).toFixed(2) + ' (cost-sharing cap of $' + (MAX_REIMBURSEMENT_PER_KM_CENTS / 100).toFixed(2) + '/km for the whole trip).'
         });
       }
     }
@@ -546,9 +550,13 @@ app.post('/recurring-routes', requireAuth, async (req, res) => {
         return res.status(400).json({ error: 'Connect with Stripe before listing a priced route.' });
       if (!priceCents || priceCents < 1)
         return res.status(400).json({ error: 'Set a price greater than zero.' });
-      if (distanceKm && priceCents > Math.round(distanceKm * MAX_REIMBURSEMENT_PER_KM_CENTS)) {
+      if ((Number(distanceKm) > 0) === false)
+        return res.status(400).json({ error: 'Enter the trip distance in km.' });
+      const capCents = Math.round(Number(distanceKm) * MAX_REIMBURSEMENT_PER_KM_CENTS);
+      const maxPerSeat = Math.floor(capCents / Number(seats));
+      if (priceCents > maxPerSeat) {
         return res.status(400).json({
-          error: `Reimbursement can't exceed $${(MAX_REIMBURSEMENT_PER_KM_CENTS/100).toFixed(2)}/km. For ${distanceKm}km, the max is $${(Math.round(distanceKm * MAX_REIMBURSEMENT_PER_KM_CENTS)/100).toFixed(2)}.`
+          error: 'For ' + distanceKm + ' km with ' + seats + ' seats, the max price per seat is $' + (maxPerSeat / 100).toFixed(2) + ' (cost-sharing cap of $' + (MAX_REIMBURSEMENT_PER_KM_CENTS / 100).toFixed(2) + '/km for the whole trip).'
         });
       }
     }
