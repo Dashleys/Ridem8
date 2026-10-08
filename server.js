@@ -326,14 +326,54 @@ app.post('/drivers/connect-account', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Road distance is calculated server-side (OpenRouteService), never taken from the driver.
+// Cached per town pair in route_distances.
+async function orsGeocode(place) {
+  const url = 'https://api.openrouteservice.org/geocode/search?api_key=' + encodeURIComponent(process.env.ORS_API_KEY) + '&boundary.country=NZ&size=1&text=' + encodeURIComponent(place + ', New Zealand');
+  const r = await fetch(url);
+  if (r.ok === false) throw new Error('Geocode failed for ' + place + ' (' + r.status + ')');
+  const j = await r.json();
+  const f = j.features && j.features[0];
+  if (f == null) throw new Error('Could not find ' + place);
+  return f.geometry.coordinates;
+}
+async function getRoadDistanceKm(from, to) {
+  const a = String(from).trim().toLowerCase();
+  const b = String(to).trim().toLowerCase();
+  if (a === '' || b === '' || a === b) throw new Error('Invalid town pair');
+  const key = a < b ? a + '|' + b : b + '|' + a;
+  const { rows } = await pool.query('SELECT distance_km FROM route_distances WHERE route_key=$1', [key]);
+  if (rows[0]) return Number(rows[0].distance_km);
+  const [s, e] = await Promise.all([orsGeocode(a), orsGeocode(b)]);
+  const url = 'https://api.openrouteservice.org/v2/directions/driving-car?api_key=' + encodeURIComponent(process.env.ORS_API_KEY) + '&start=' + s.join(',') + '&end=' + e.join(',');
+  const r = await fetch(url);
+  if (r.ok === false) throw new Error('Route lookup failed (' + r.status + ')');
+  const j = await r.json();
+  const m = j.features && j.features[0] && j.features[0].properties.summary.distance;
+  if ((m > 0) === false) throw new Error('No driving route found');
+  const km = Math.round(m / 100) / 10;
+  await pool.query('INSERT INTO route_distances (route_key, distance_km) VALUES ($1,$2) ON CONFLICT (route_key) DO NOTHING', [key, km]);
+  return km;
+}
+app.get('/distance', requireAuth, async (req, res) => {
+  try {
+    const km = await getRoadDistanceKm(req.query.from || '', req.query.to || '');
+    res.json({ distanceKm: km, capCents: Math.round(km * MAX_REIMBURSEMENT_PER_KM_CENTS) });
+  } catch (e) {
+    res.status(400).json({ error: 'Could not calculate the road distance between those towns. Check the spelling or pick from the list.' });
+  }
+});
+
 app.post('/rides', requireAuth, async (req, res) => {
   try {
-    const { from, to, date, departureTime, seats, contributionType, priceCents, petrolNote, distanceKm } = req.body;
+    const { from, to, date, departureTime, seats, contributionType, priceCents, petrolNote } = req.body;
     if (!from||!to||!seats||!contributionType)
       return res.status(400).json({ error: 'From, to, seats and contribution type are required.' });
     if (date && date < new Date().toISOString().split('T')[0])
       return res.status(400).json({ error: 'Please choose a date from today onwards.' });
     if (containsBlockedContent(petrolNote)) return res.status(400).json({ error: 'Please remove inappropriate language from your note.' });
+    let distanceKm = null;
+    try { distanceKm = await getRoadDistanceKm(from, to); } catch (e) { console.error('distance lookup:', e.message); }
     if (contributionType === 'price') {
       const { rows } = await pool.query('SELECT charges_enabled FROM users WHERE id = $1', [req.userId]);
       const driver = rows[0];
@@ -344,7 +384,7 @@ app.post('/rides', requireAuth, async (req, res) => {
       // Reimbursement (what the driver claims for fuel/vehicle cost) must stay under the
       // gazetted per-km cap so the ride qualifies as cost-sharing rather than a commercial fare.
       if ((Number(distanceKm) > 0) === false)
-        return res.status(400).json({ error: 'Enter the trip distance in km.' });
+        return res.status(400).json({ error: 'Could not calculate the road distance between those towns. Check the spelling or pick from the list.' });
       const capCents = Math.round(Number(distanceKm) * MAX_REIMBURSEMENT_PER_KM_CENTS);
       const maxPerSeat = Math.floor(capCents / Number(seats));
       if (priceCents > maxPerSeat) {
@@ -538,12 +578,14 @@ function validDaysOfWeek(arr) {
 
 app.post('/recurring-routes', requireAuth, async (req, res) => {
   try {
-    const { from, to, daysOfWeek, departureTime, seats, contributionType, priceCents, petrolNote, distanceKm } = req.body;
+    const { from, to, daysOfWeek, departureTime, seats, contributionType, priceCents, petrolNote } = req.body;
     if (!from||!to||!seats||!contributionType||!departureTime)
       return res.status(400).json({ error: 'From, to, seats, departure time and contribution type are required.' });
     if (!validDaysOfWeek(daysOfWeek))
       return res.status(400).json({ error: 'Pick at least one valid day of the week.' });
     if (containsBlockedContent(petrolNote)) return res.status(400).json({ error: 'Please remove inappropriate language from your note.' });
+    let distanceKm = null;
+    try { distanceKm = await getRoadDistanceKm(from, to); } catch (e) { console.error('distance lookup:', e.message); }
     if (contributionType === 'price') {
       const { rows } = await pool.query('SELECT charges_enabled FROM users WHERE id = $1', [req.userId]);
       if (!rows[0]?.charges_enabled)
@@ -551,7 +593,7 @@ app.post('/recurring-routes', requireAuth, async (req, res) => {
       if (!priceCents || priceCents < 1)
         return res.status(400).json({ error: 'Set a price greater than zero.' });
       if ((Number(distanceKm) > 0) === false)
-        return res.status(400).json({ error: 'Enter the trip distance in km.' });
+        return res.status(400).json({ error: 'Could not calculate the road distance between those towns. Check the spelling or pick from the list.' });
       const capCents = Math.round(Number(distanceKm) * MAX_REIMBURSEMENT_PER_KM_CENTS);
       const maxPerSeat = Math.floor(capCents / Number(seats));
       if (priceCents > maxPerSeat) {
